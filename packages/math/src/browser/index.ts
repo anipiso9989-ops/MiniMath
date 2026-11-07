@@ -1,4 +1,4 @@
-import { mathNamespace, readable, serializeMathML } from "../backends/mathml.js";
+import { htmlNamespace, mathNamespace, readable, serializeMathML } from "../backends/mathml.js";
 import { withMath } from "../engine.js";
 import { OutputBudget } from "../model/limits.js";
 import type { MathArtifact, Result } from "../model/types.js";
@@ -33,12 +33,13 @@ export function mount(container: Element, source: string, options: MountOptions 
 
     const fragment = document.createDocumentFragment();
     let parent: Node = fragment;
-    const result = withMath(source, options, advanced?.advancedExtensions(options.macros), (root, limits) => {
+    const result = withMath(source, options, advanced?.advancedExtensions(options), (root, limits) => {
       const budget = new OutputBudget(limits.maxOutputBytes);
       const mathml = serializeMathML(root, options.display === true, budget, native ? {
-        open(tag, attribute, value) {
-          const node = document.createElementNS(mathNamespace, tag);
-          if (attribute) node.setAttribute(attribute, value!);
+        open(tag, attribute, value, other, otherValue) {
+          const node = document.createElementNS(tag === "a" && attribute === "xmlns" ? htmlNamespace : mathNamespace, tag);
+          if (attribute && attribute !== "xmlns") node.setAttribute(attribute, value!);
+          if (other) node.setAttribute(other, otherValue!);
           parent.appendChild(node);
           parent = node;
         },

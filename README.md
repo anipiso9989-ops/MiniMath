@@ -1,6 +1,6 @@
 # MiniMath
 
-MiniMath is the standalone TypeScript math engine in the Mini architecture. The `@mini/math` package turns a documented TeX-like subset into native MathML and readable text, with optional matrices, aligned equations, parameterized macros, browser mounting, and SVG layout. The native package ships as ESM with declarations and zero runtime dependencies. The optional compatibility entry points load KaTeX or MathJax for broader TeX syntax.
+MiniMath is the standalone TypeScript math engine in the Mini architecture. It ships as ESM with declarations and zero runtime or peer dependencies. The core renders TeX-like expressions to native MathML and readable text. Optional entry points add wider notation, document-wide equation numbering, browser mounting, and SVG.
 
 ```ts
 import { render } from "@mini/math";
@@ -12,7 +12,7 @@ if (result.ok) {
 ```
 
 - [API, native syntax, security, and accessibility](packages/math/README.md)
-- [KaTeX and MathJax compatibility](packages/math/README.md#broader-latex-coverage)
+- [Numbered equations and document references](packages/math/README.md#equation-numbering-and-references)
 - [Architecture and library review](docs/architecture.md)
 - [Measured performance, bundle size, and memory](docs/benchmarks.md)
 
@@ -25,8 +25,10 @@ pnpm install --frozen-lockfile
 pnpm test
 pnpm exec playwright-core install chromium
 pnpm test:browser
-pnpm bench --browser
+pnpm bench --size-only --native-only
 pnpm --filter @mini/math pack
 ```
 
 `pnpm test` covers the server API, output limits, malformed input, extensions, and the integration protocol. `pnpm test:browser` checks rendering, accessibility exposure, CSP and Trusted Types, and lazy loading in Chromium. Set `CHROMIUM_PATH` to use a specific Chromium executable. The packed package targets Node.js 20+ and evergreen browsers with native MathML.
+
+To run reference comparisons, install the isolated benchmark fixtures with `npm ci --prefix benchmarks/reference`, then run `pnpm bench --size-only` or `pnpm bench --browser`.

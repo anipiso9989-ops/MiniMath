@@ -8,6 +8,11 @@ export interface Extensions {
   readonly macro?: (lexer: Lexer, token: Token) => boolean;
   readonly scope?: (enter: boolean) => void;
   readonly environment?: (parser: Parser, token: Token, depth: number) => MathNode;
+  readonly command?: (parser: Parser, token: Token, depth: number) => MathNode | null | undefined;
+  readonly directive?: (parser: Parser, token: Token, depth: number) => Omit<Extract<MathNode, { kind: "style" }>, "kind" | "body"> | undefined;
+  readonly infix?: (parser: Parser, token: Token, depth: number) =>
+    { readonly bar?: false; readonly left?: string; readonly right?: string; readonly thickness?: number } | undefined;
+  readonly finish?: (root: Row, parser: Parser) => Row;
 }
 
 const digit = /^[0-9]$/;
@@ -25,8 +30,11 @@ export class Parser {
   #nodes = 0;
   readonly #lexer: Lexer;
 
-  constructor(source: string, readonly limits: Limits, readonly signal?: AbortSignal, readonly extensions?: Extensions) {
-    this.#lexer = new Lexer(source, limits);
+  constructor(
+    source: string, readonly limits: Limits, readonly signal?: AbortSignal, readonly extensions?: Extensions,
+    expansionBudget?: ConstructorParameters<typeof Lexer>[3],
+  ) {
+    this.#lexer = new Lexer(source, limits, undefined, expansionBudget);
   }
 
   peek(): Token {
@@ -64,22 +72,57 @@ export class Parser {
     this.extensions?.scope?.(enter);
   }
 
-  rawGroup(depth: number): string {
-    const open = this.expect("{", "Expected a braced argument.");
-    this.depth(depth, open.range);
-    return this.#lexer.rawGroup(open, depth);
+  get nodeCount(): number {
+    return this.#nodes;
   }
 
-  sequence(depth: number, stops: readonly string[] = []): Row {
+  rawGroup(depth: number, preserveGroups = false): string {
+    const open = this.expect("{", "Expected a braced argument.");
+    this.depth(depth, open.range);
+    return this.#lexer.rawGroup(open, depth, preserveGroups);
+  }
+
+  sourceGroup(depth: number): string {
+    const open = this.expect("{", "Expected a braced argument.");
+    this.depth(depth, open.range);
+    return this.#lexer.rawGroup(open, depth, true, true);
+  }
+
+  expansion<T>(work: (lexer: Lexer) => T): T {
+    if (this.#lookahead) throw new Error("Cannot insert an expansion after reading a lookahead token.");
+    return work(this.#lexer);
+  }
+
+  verbatim(token: Token): string {
+    return this.#lexer.verbatim(token.range);
+  }
+
+  sequence(depth: number, stops: readonly string[] = [], infixAllowed = true): Row {
     const first = this.peek();
     this.depth(depth, first.range);
     const children: MathNode[] = [];
     for (let token = first; token.value && !stops.includes(token.value); token = this.peek()) {
       this.take();
+      const infix = token.value[0] === "\\" ? this.extensions?.infix?.(this, token, depth) : undefined;
+      if (infix) {
+        if (!infixAllowed) fail("syntax", "Only one infix fraction is allowed per group.", token.range);
+        const top = this.create({ kind: "row", children }, first.range);
+        const bottom = this.sequence(depth + 1, stops, false);
+        const fraction = this.create<MathNode>({ kind: "fraction", top, bottom, ...(infix.bar === false && { bar: false }),
+          ...(infix.thickness !== undefined && { thickness: infix.thickness }) }, token.range);
+        const body = infix.left || infix.right ? this.create({ kind: "fence", left: infix.left ?? "", right: infix.right ?? "", body: fraction }, token.range) : fraction;
+        return this.create({ kind: "row", children: [body] }, first.range);
+      }
+      const style = token.value[0] === "\\" ? this.extensions?.directive?.(this, token, depth) : undefined;
+      if (style) {
+        const body = this.sequence(depth + 1, stops, infixAllowed);
+        children.push(this.create({ kind: "style", body, ...style }, token.range));
+        break;
+      }
       const base = digit.test(token.value) || (token.value === "." && digit.test(this.peek().value))
         ? this.#number(token)
         : this.#atom(token, depth);
-      children.push(this.#scripts(base, depth));
+      if (base) children.push(this.#scripts(base, depth));
     }
     return this.create({ kind: "row", children }, first.range);
   }
@@ -94,27 +137,36 @@ export class Parser {
     return this.create({ kind: "atom", role: "number", value }, token.range);
   }
 
-  #argument(depth: number): MathNode {
+  argument(depth: number): MathNode {
     const token = this.take();
     this.depth(depth, token.range);
-    return this.#atom(token, depth);
+    return this.#atom(token, depth) ?? fail("syntax", "Expected a math argument.", token.range);
   }
 
   #scripts(base: MathNode, depth: number): MathNode {
     let sub: MathNode | undefined;
     let sup: MathNode | undefined;
     const first = this.peek();
+    let limits: boolean | undefined;
+    if (this.extensions?.command && ["\\limits", "\\nolimits", "\\displaylimits"].includes(first.value)) {
+      if (base.kind !== "atom" || !["large", "integral", "function"].includes(base.role)) {
+        fail("syntax", "Limits require an operator.", first.range);
+      }
+      this.take();
+      if (first.value !== "\\displaylimits") limits = first.value === "\\limits";
+      else if (base.role !== "large") base = { ...base, role: "large" };
+    }
     while (true) {
       const token = this.peek();
       if (token.value !== "_" && token.value !== "^" && token.value !== "'") break;
       this.take();
       if (token.value === "_") {
         if (sub) fail("duplicate-script", "Duplicate subscript.", token.range);
-        sub = this.#argument(depth + 1);
+        sub = this.argument(depth + 1);
       } else {
         if (sup) fail("duplicate-script", "Duplicate superscript.", token.range);
         if (token.value === "^") {
-          sup = this.#argument(depth + 1);
+          sup = this.argument(depth + 1);
         } else {
           this.depth(depth + 1, token.range);
           let value = "′";
@@ -127,11 +179,11 @@ export class Parser {
       }
     }
     return sub || sup
-      ? this.create({ kind: "script", base, ...(sub && { sub }), ...(sup && { sup }) }, first.range)
+      ? this.create({ kind: "script", base, ...(sub && { sub }), ...(sup && { sup }), ...(limits !== undefined && { limits }) }, first.range)
       : base;
   }
 
-  #atom(token: Token, depth: number): MathNode {
+  #atom(token: Token, depth: number): MathNode | undefined {
     const { value, range } = token;
     if (value === "{") {
       this.scope(true);
@@ -156,7 +208,7 @@ export class Parser {
     return fail("invalid-character", "Unsupported math character. Use a braced text command for prose.", range);
   }
 
-  #command(token: Token, depth: number): MathNode {
+  #command(token: Token, depth: number): MathNode | undefined {
     const { value, range } = token;
     const name = value.slice(1);
     switch (name) {
@@ -168,14 +220,14 @@ export class Parser {
       case "tbinom": {
         const binomial = name.endsWith("binom");
         const fraction = this.create<MathNode>({
-          kind: "fraction", top: this.#argument(depth + 1), bottom: this.#argument(depth + 1),
+          kind: "fraction", top: this.argument(depth + 1), bottom: this.argument(depth + 1),
           ...(binomial && { bar: false }), ...(name[0] === "d" && { display: true }),
           ...(name[0] === "t" && { display: false }),
         }, range);
         return binomial ? this.create({ kind: "fence", left: "(", right: ")", body: fraction }, range) : fraction;
       }
       case "mathbb":
-        return blackboard(this.#argument(depth + 1), range);
+        return blackboard(this.argument(depth + 1));
       case "sqrt": {
         let index: MathNode | undefined;
         if (this.peek().value === "[") {
@@ -183,7 +235,7 @@ export class Parser {
           index = this.sequence(depth + 1, ["]"]);
           this.expect("]", "Expected a closing bracket after the root index.");
         }
-        return this.create({ kind: "root", body: this.#argument(depth + 1), ...(index && { index }) }, range);
+        return this.create({ kind: "root", body: this.argument(depth + 1), ...(index && { index }) }, range);
       }
       case "text":
         return this.create({ kind: "atom", role: "text", value: this.rawGroup(depth + 1) }, range);
@@ -204,7 +256,9 @@ export class Parser {
     if (width !== undefined) return this.create({ kind: "space", width }, range);
     const resolved = symbol(name);
     if (resolved) return this.create({ kind: "atom", role: resolved[0], value: resolved[1] }, range);
-    return fail("unknown-command", "Unknown math command.", range);
+    const extended = this.extensions?.command?.(this, token, depth);
+    if (extended === undefined) fail("unknown-command", "Unknown math command.", range);
+    return extended ?? undefined;
   }
 
   #fence(): string {

@@ -1,14 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { arch, cpus, platform } from "node:os";
-import { basename, relative } from "node:path";
+import { relative } from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import { build, version as esbuild } from "esbuild";
 import { bundles, fixtures, renderers } from "./variants.mjs";
-import { compatibility } from "./fixtures.mjs";
-import { createCompatibleRenderer } from "@mini/math/compat";
+import { measureCoverage } from "./reference/coverage.mjs";
 
 const repeats = 7;
+const nativeOnly = process.argv.includes("--native-only");
+const selected = Object.entries(renderers).filter(([name]) => !nativeOnly || name.startsWith("MiniMath"));
 const median = (values) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
 const filesSize = (files) => files.reduce((size, { contents }) => {
   size.raw += contents.length;
@@ -42,69 +43,13 @@ async function size(contents, splitting) {
   };
 }
 
-async function compatibilitySamples(browser) {
-  const { outputFiles } = await bundle(
-    'import { createCompatibleRenderer } from "@mini/math/compat"; globalThis.compat = createCompatibleRenderer();',
-    true,
-  );
-  const files = new Map(outputFiles.map((file) => ["/" + basename(file.path), file]));
-  const fetched = new Set();
-  const page = await browser.newPage();
-  try {
-    await page.route("http://compat.test/**", (route) => {
-      const path = new URL(route.request().url()).pathname;
-      const file = files.get(path);
-      if (file) {
-        fetched.add(file);
-        return route.fulfill({ contentType: "text/javascript", body: file.text });
-      }
-      return route.fulfill({ contentType: "text/html", body: '<!doctype html><meta charset="utf-8"><script type="module" src="/entry.js"></script>' });
-    });
-    await page.goto("http://compat.test/");
-    const results = { initial: filesSize([...fetched]) };
-    for (const [renderer, source] of [
-      ["native", compatibility["Binomial coefficients"]],
-      ["katex", compatibility["Labeled arrows"]],
-      ["mathjax", compatibility["Equation tags"]],
-    ]) {
-      const before = new Set(fetched);
-      const measurement = await page.evaluate(async ({ renderer, source, repeats }) => {
-        async function render() {
-          const result = await globalThis.compat(source, { display: true });
-          if (!result.ok || result.artifact.renderer !== renderer) throw new Error(JSON.stringify(result));
-        }
-        const start = performance.now();
-        await render();
-        const firstMs = performance.now() - start;
-        const batch = async () => {
-          const start = performance.now();
-          for (let i = 0; i < 256; i++) await render();
-          return (performance.now() - start) * 1000 / 256;
-        };
-        await batch();
-        const warm = [];
-        for (let i = 0; i < repeats; i++) warm.push(await batch());
-        return { firstMs, warm };
-      }, { renderer, source, repeats });
-      results[renderer] = {
-        fetched: filesSize([...fetched].filter((file) => !before.has(file))),
-        firstMs: measurement.firstMs,
-        warmUs: median(measurement.warm),
-      };
-    }
-    return results;
-  } finally {
-    await page.close();
-  }
-}
-
 async function browserSamples() {
   const { chromium } = await import("playwright-core");
   const executablePath = process.env.CHROMIUM_PATH ?? (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined);
   const browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
   try {
     const results = {};
-    for (const [name, variant] of Object.entries(renderers)) {
+    for (const [name, variant] of selected) {
       const { outputFiles: [script] } = await bundle(variant.browser);
       const page = await browser.newPage();
       await page.route("http://benchmark.test/**", (route) => route.request().url().endsWith("entry.js")
@@ -132,7 +77,7 @@ async function browserSamples() {
       }
       await page.close();
     }
-    return { chromium: browser.version(), batchSize: 256, medianMs: results, compatibility: await compatibilitySamples(browser) };
+    return { chromium: browser.version(), batchSize: 256, medianMs: results };
   } finally {
     await browser.close();
   }
@@ -140,25 +85,15 @@ async function browserSamples() {
 
 const output = {
   machine: { node: process.version, platform: platform(), arch: arch(), cpu: cpus()[0]?.model, esbuild },
-  repeats, bundles: {}, node: {}, compatibility: {},
+  repeats, bundles: {}, node: {},
 };
 for (const [name, source] of Object.entries(bundles)) {
   output.bundles[name] = await size(source, name.includes("lazy") || name.includes("mount"));
 }
 output.bundles["MiniMath alignment CSS"] = { initial: filesSize([{ contents: readFileSync("packages/math/styles.css") }]) };
-for (const [name, variant] of Object.entries(renderers)) {
+for (const [name, variant] of selected) {
   if (name === "KaTeX" || name.startsWith("MathJax")) output.bundles[name] = await size(variant.browser, false);
-  if (variant.workloads.includes("macros")) {
-    const render = await variant.load();
-    output.compatibility[name] = Object.fromEntries(Object.entries(compatibility).map(([label, source]) => {
-      try {
-        const markup = render(source);
-        return [label, markup.includes("<math") && !markup.includes("<merror")];
-      } catch {
-        return [label, false];
-      }
-    }));
-  }
+  if (process.argv.includes("--size-only")) continue;
   for (const workload of variant.workloads) {
     const samples = Array.from({ length: repeats }, () => JSON.parse(execFileSync(
       process.execPath, ["--expose-gc", "benchmarks/sample.mjs", name, workload], { encoding: "utf8" })));
@@ -166,12 +101,6 @@ for (const [name, variant] of Object.entries(renderers)) {
       Object.keys(samples[0]).map((metric) => [metric, median(samples.map((sample) => sample[metric]))]));
   }
 }
-const renderCompatible = createCompatibleRenderer();
-output.compatibility["MiniMath with compatibility"] = Object.fromEntries(await Promise.all(
-  Object.entries(compatibility).map(async ([label, source]) => {
-    const result = await renderCompatible(source, { display: true });
-    return [label, result.ok ? result.artifact.renderer : false];
-  }),
-));
+if (!nativeOnly) output.coverage = await measureCoverage();
 if (process.argv.includes("--browser")) output.browser = await browserSamples();
 process.stdout.write(JSON.stringify(output, null, 2) + "\n");

@@ -1,82 +1,55 @@
 import { parseMath, renderMath } from "../engine.js";
-import { fail } from "../model/limits.js";
-import type { MathArtifact, MathNode, RenderOptions, Result, Row, Table } from "../model/types.js";
-import type { Token } from "../parse/lexer.js";
-import type { Extensions, Parser } from "../parse/parser.js";
+import type { MathArtifact, RenderOptions, Result, Row } from "../model/types.js";
+import type { Extensions } from "../parse/parser.js";
+import { environment } from "./environments.js";
+import { EquationBook, EquationExpression, isEquationCommand } from "./equations.js";
+import type { NumberingOptions } from "./equations.js";
 import { macroExtensions } from "./macros.js";
 import type { MacroDefinition } from "./macros.js";
+import { isNotationCommand, notationCommand, notationDirective, notationInfix } from "./notation.js";
+import { isScienceCommand, scienceCommand } from "./science.js";
+import { choose } from "./style-choice.js";
 
 export type { MacroDefinition } from "./macros.js";
+export type { Numbering, NumberingOptions } from "./equations.js";
 
-export interface AdvancedOptions extends RenderOptions {
+export interface AdvancedOptions extends RenderOptions, NumberingOptions {
   readonly macros?: Readonly<Record<string, MacroDefinition>>;
 }
 
-const matrixFences: Readonly<Record<string, readonly [string, string]>> = {
-  matrix: ["", ""], pmatrix: ["(", ")"], bmatrix: ["[", "]"], Bmatrix: ["{", "}"],
-  vmatrix: ["|", "|"], Vmatrix: ["‖", "‖"],
-};
-const rowBreak = "\\\\";
-const end = "\\end";
-const cellStops = ["&", rowBreak, end];
-
-function close(parser: Parser, name: string, depth: number): void {
-  const token = parser.expect(end, "Expected a closing environment command.");
-  if (parser.rawGroup(depth + 1) !== name) fail("environment-mismatch", "Mismatched environment names.", token.range);
+export function advancedMacros(options: AdvancedOptions): ReturnType<typeof macroExtensions> {
+  return macroExtensions(options.macros, (name) => isEquationCommand(name) || isNotationCommand(name) || isScienceCommand(name));
 }
 
-function environment(parser: Parser, token: Token, depth: number): MathNode {
-  parser.scope(true);
-  const name = parser.rawGroup(depth + 1);
-  if (name === "equation" || name === "equation*") {
-    const body = parser.sequence(depth + 1, [end]);
-    close(parser, name, depth);
-    parser.scope(false);
-    return body;
-  }
-  const fences = Object.hasOwn(matrixFences, name) ? matrixFences[name] : undefined;
-  const alignment = name === "cases" ? "left" : name === "aligned" || name === "align" || name === "align*" ? "alternate" : undefined;
-  if (!fences && !alignment) return fail("unknown-environment", "Unknown math environment.", token.range);
-
-  const rows: Row[][] = [];
-  const start = parser.peek();
-  let cellStart = start;
-  let cells: Row[] = [];
-  do {
-    if (!cellStart.value) fail("syntax", "Unclosed math environment.", cellStart.range);
-    cells.push(parser.sequence(depth + 1, cellStops));
-    const next = parser.peek();
-    if (next.value === "&") {
-      parser.take();
-    } else {
-      if (cells.length !== (alignment === "left" ? 2 : rows[0]?.length ?? cells.length)) {
-        fail("table-shape", "Table rows must have the same number of columns. Cases require two columns.", cellStart.range);
-      }
-      rows.push(cells);
-      cells = [];
-      if (next.value !== rowBreak) break;
-      parser.take();
-    }
-    cellStart = parser.peek();
-  } while (cells.length || cellStart.value !== end);
-  close(parser, name, depth);
-  parser.scope(false);
-  const table = parser.create<Table>({ kind: "table", alignment: alignment ?? "center", rows }, start.range);
-  if (fences && (fences[0] || fences[1])) {
-    return parser.create({ kind: "fence", left: fences[0], right: fences[1], body: table }, token.range);
-  }
-  if (alignment === "left") return parser.create({ kind: "fence", left: "{", right: "", body: table }, token.range);
-  return table;
-}
-
-export function advancedExtensions(macros?: AdvancedOptions["macros"]): Extensions {
-  return { environment, ...macroExtensions(macros) };
+export function advancedExtensions(
+  options: AdvancedOptions,
+  expression = new EquationExpression(new EquationBook(options), options.display === true),
+  macros = advancedMacros(options),
+  deferReferences = false,
+): Extensions {
+  let hasChoice = false;
+  return {
+    ...macros,
+    directive: notationDirective,
+    infix: notationInfix,
+    command(parser, token, depth) {
+      if (token.value === "\\mathchoice") hasChoice = true;
+      const equation = expression.command(parser, token, depth);
+      return equation === undefined ? notationCommand(parser, token, depth) ?? scienceCommand(parser, token, depth) : equation;
+    },
+    environment: (parser, token, depth) => environment(expression, macros.customEnvironment, parser, token, depth),
+    finish(root, parser) {
+      const selected = hasChoice ? choose(root, expression.display ? 0 : 1) as Row : root;
+      const finished = expression.finish(selected, parser);
+      return !deferReferences && expression.hasReferences ? expression.book.resolve(finished) : finished;
+    },
+  };
 }
 
 export function parseAdvanced(source: string, options: AdvancedOptions = {}): Result<Row> {
-  return parseMath(source, options, advancedExtensions(options.macros));
+  return parseMath(source, options, advancedExtensions(options));
 }
 
 export function renderAdvanced(source: string, options: AdvancedOptions = {}): Result<MathArtifact> {
-  return renderMath(source, options, advancedExtensions(options.macros));
+  return renderMath(source, options, advancedExtensions(options));
 }

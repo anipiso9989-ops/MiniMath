@@ -1,2 +1,12 @@
 .mini-math-left { text-align: left; }
 .mini-math-right { text-align: right; }
+.mini-math-tag { text-align: right; white-space: nowrap; }
+math[display="block"] mtable.mini-math-numbered { width: 100%; }
+.mini-math-rule-left { border-left: thin solid currentColor; }
+.mini-math-rule-right { border-right: thin solid currentColor; }
+.mini-math-line-solid > mtd { border-top: thin solid currentColor; }
+.mini-math-line-dashed > mtd { border-top: thin dashed currentColor; }
+.mini-math-last-solid { border-bottom: thin solid currentColor; }
+.mini-math-last-dashed { border-bottom: thin dashed currentColor; }
+.mini-math-double-left { border-left: medium double currentColor; }
+.mini-math-double-right { border-right: medium double currentColor; }

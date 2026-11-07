@@ -99,3 +99,21 @@ test("uses the same macro expansion for parsed ASTs and the advanced SVG backend
   assert.equal(svg.mathml, success(render("x^2")).mathml);
   assert.match(svg.svg, /superscript \(2\)/);
 });
+
+test("supports scoped custom environments and balanced opening and closing code", () => {
+  const source = tex`\newenvironment{paren}[1][x]{\left(#1+}{\right)}\begin{paren}[y]z\end{paren}`;
+  equivalent(source, tex`{\left(y+z\right)}`);
+  equivalent(tex`\newenvironment{paren}{\left(}{\right)}\begin{paren}\begin{paren}x\end{paren}\end{paren}`,
+    tex`{\left({\left(x\right)}\right)}`);
+  const table = success(renderAdvanced(tex`\newenvironment{surround}{\left(}{\right)}\begin{surround}\begin{matrix}1\end{matrix}\end{surround}`));
+  assert.match(table.mathml, /<mtable>/);
+  error(renderAdvanced(tex`\newenvironment{paren}{}{}\begin{paren}x\end{wrong}`), "environment-mismatch");
+});
+
+test("constructs and expands named control sequences within the existing budgets", () => {
+  equivalent(tex`\def\saved{x}\csname saved\endcsname`, "x");
+  equivalent(tex`\def\part{saved}\def\saved{x}\csname\part\endcsname`, "x");
+  equivalent(tex`\expandafter\def\csname saved\endcsname{x}\saved`, "x");
+  error(renderAdvanced(tex`\csname missing`), "macro-argument");
+  error(renderAdvanced(tex`\def\cycle{\cycle}\csname\cycle\endcsname`, { limits: { maxExpansions: 3 } }), "expansion-limit");
+});

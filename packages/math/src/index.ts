@@ -2,7 +2,7 @@ import { parseMath, renderMath } from "./engine.js";
 import type { MathArtifact, ParseOptions, RenderOptions, Result, Row } from "./model/types.js";
 
 export type {
-  Atom, AtomRole, Diagnostic, Fence, Limits, MathArtifact, MathNode, ParseOptions,
+  Atom, AtomRole, Diagnostic, EquationTag, Fence, Limits, MathArtifact, MathNode, ParseOptions,
   Range, RenderOptions, Result, Row, Table,
 } from "./model/types.js";
 

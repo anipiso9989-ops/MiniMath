@@ -1,19 +1,17 @@
 # @mini/math
 
-MiniMath renders TeX-like mathematics in Node.js 20+ and modern browsers. The package is ESM with TypeScript declarations. Native rendering has zero runtime dependencies. The optional compatibility entry points use separately installed peers.
+MiniMath renders TeX-like mathematics in Node.js 20+ and modern browsers. The package is ESM with TypeScript declarations and zero runtime or peer dependencies.
 
 ## API
 
 | Import | Exports |
 | --- | --- |
 | `@mini/math` | `parse(source, options?)` returns a typed math AST. `render(source, options?)` returns MathML and readable text. |
-| `@mini/math/advanced` | `parseAdvanced` and `renderAdvanced` add matrices, equation environments, and parameterized macros. |
+| `@mini/math/advanced` | `parseAdvanced` and `renderAdvanced` add arrays, equations, fonts, accents, macros, and specialized notation. |
+| `@mini/math/document` | `renderDocument` numbers equations and resolves labels and references across expressions. |
 | `@mini/math/visual` | `renderVisual` returns SVG, MathML, readable text, and layout metrics. |
 | `@mini/math/advanced/visual` | `renderAdvancedVisual` adds the advanced grammar to the SVG renderer. |
 | `@mini/math/browser` | `mount(container, source, options?)` owns a browser view. |
-| `@mini/math/compat` | `createCompatibleRenderer` tries the native engine first and loads compatibility engines on demand. |
-| `@mini/math/compat/katex` | `renderKaTeX` selects the KaTeX parser and returns checked MathML. |
-| `@mini/math/compat/mathjax` | `createMathJaxRenderer` selects a MathJax TeX package profile and returns a synchronous MathML renderer after setup. |
 | `@mini/math/integration` | `integration` exposes the versioned MiniRender protocol adapter for the core renderer. |
 | `@mini/math/styles.css` | Explicit left and right cell alignment rules for MathML cases and aligned equations. |
 
@@ -72,52 +70,52 @@ Mount replaces the container's children with a view it owns. Enable `advanced: t
 | Delimiters | Literal parentheses, brackets, and bars. `\left` and `\right` make delimiters stretch. A dot after either command makes that side invisible. |
 | Symbols and named operators | Greek letters and variants, blackboard bold for Latin letters and digits via `\mathbb`, common set and logical operators, arrows, `\sum`, `\prod`, `\int`, `\lim`, and named functions such as `\sin`, `\log`, and `\det`. The command tables are in [symbols.ts](src/parse/symbols.ts). |
 | Prose and spacing | `\text{...}`, `\,`, `\:`, `\;`, backslash-space, `\quad`, and `\qquad`. Inside text, backslash escapes braces, backslash, space, dollar, percent, ampersand, hash, and underscore. |
-| Advanced environments | `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`, `Vmatrix`, `aligned`, `align`, `align*`, `cases`, `equation`, and `equation*`. Separate cells with `&` and rows with two backslashes. Tables are rectangular and cases have two columns. Empty cells and a final row separator are accepted. Equations are unnumbered. |
+| Advanced environments | `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`, `Vmatrix`, `aligned`, `align`, `align*`, `cases`, `equation`, and `equation*`. Separate cells with `&` and rows with two backslashes. Tables are rectangular and cases have two columns. Empty cells and a final row separator are accepted. Equations are unnumbered by default. |
 | Advanced macros | Configured macros and source declarations support up to nine arguments, a first optional argument with a default, nested calls, and repeated or reordered parameters. |
 
-The native profile takes the expression body directly. Surrounding `$` or `$$`, arbitrary TeX packages and equation numbering and references are outside this profile. The package typesets equations and matrices. It takes TeX-like source and emits presentation MathML.
+Pass the expression body directly. The core parser supports the base forms above. Use the advanced and document entry points for the forms below.
 
-## Broader LaTeX coverage
+## Advanced notation
 
-For automatic routing, install both optional peers. The version pair below is used in tests and benchmarks.
+| Form | Examples and scope |
+| --- | --- |
+| Fonts, accents, and labeled arrows | `\mathbf`, `\mathrm`, `\mathcal`, `\mathfrak`, `\widehat`, `\overline`, `\underline`, `\operatorname`, `\xrightarrow[below]{above}`, and related arrow commands. |
+| Style and placement | `\mathchoice`, `\displaystyle`, `\scriptstyle`, `\genfrac`, `\over`, `\atop`, `\choose`, `\limits`, `\sideset`, `\prescript`, `\raisebox`, `\rule`, and `\phantom`. |
+| Color and enclosure | Named, hexadecimal, and RGB colors, `\boxed`, `\enclose`, `\cancel`, and `\cancelto`. SVG draws the enclosure geometry with local font metrics. |
+| Arrays and equations | `array` with `l`, `c`, `r`, vertical rules, and `*{count}{columns}` repetitions, plus `\hline` and `\hdashline`. Environments include `align`, `alignat`, `gather`, `multline`, `split`, `cases`, and matrix variants. Import the stylesheet for alignment and rules in browser MathML. |
+| Specialized notation | Chemical formulas and reactions with `\ce`, physical units with `\pu`, common physics derivatives and bra-ket notation, AMS `CD` diagrams, and elementary `prooftree` inferences. |
 
-```sh
-npm install katex@0.19.1 @mathjax/src@4.1.3
-```
+The source command tables are in [notation.ts](src/features/notation.ts), [science.ts](src/features/science.ts), and [environments.ts](src/features/environments.ts). The chemistry, unit, and proof parsers implement their documented syntax profiles.
+
+## Equation numbering and references
 
 ```ts
-import { createCompatibleRenderer } from "@mini/math/compat";
+import { renderDocument } from "@mini/math/document";
 
-const render = createCompatibleRenderer();
-const result = await render(String.raw`\begin{equation}x=1\tag{5}\end{equation}`, { display: true });
+const result = renderDocument([
+  { source: String.raw`\eqref{energy}` },
+  { source: String.raw`\begin{equation}E=mc^2\label{energy}\end{equation}`, display: true },
+], { numbering: "ams", idPrefix: "paper-" });
+
 if (result.ok) {
-  console.log(result.artifact.renderer); // mathjax
-  console.log(result.artifact.mathml);
+  // Insert the artifacts in the same document so the fragment link can resolve.
+  console.log(result.artifact.entries.map((entry) => entry.mathml));
 }
 ```
 
-The router first attempts the native advanced parser. KaTeX loads after a native syntax miss and MathJax loads if KaTeX cannot render the expression. Limits, cancellation, and blocked commands end the attempt. Bundlers with ESM code splitting fetch the peer code when that renderer is first needed. Direct adapter imports let you install only the chosen peer and choose its parser for every expression. Use the MathJax adapter to select packages such as `physics`, `mathtools`, or `bussproofs`, and to configure automatic numbering.
-
-```ts
-import { createMathJaxRenderer } from "@mini/math/compat/mathjax";
-
-const render = await createMathJaxRenderer({ packages: ["physics", "mhchem"], tags: "ams" });
-const result = render(String.raw`\qty(x)\quad\ce{H2O}`);
-```
-
-Each expression runs through one parser. The default profiles cover the demonstrated gaps, and direct adapters expose additional grammar through installed packages. Compatibility output is checked MathML with the source as plain-text fallback. The original engines' HTML/SVG styling, document-wide equation numbering state, arbitrary HTML, URLs, and input-triggered package loading are outside the compatibility surface. Imports and configured package loads can reject if a peer or chunk is unavailable. Use the alignment stylesheet for MathML table alignment in browsers.
+`numbering: "none"` keeps explicit tags only, `"ams"` numbers the unstarred AMS environments, and `"all"` also numbers plain display expressions. Use `\tag`, `\tag*`, `\notag`, `\label`, `\ref`, and `\eqref` in source. Explicit tags do not advance the counter. Use a distinct `idPrefix` for each set of formulas on the same page. The renderer resolves forward references, returns the label map, and reports errors with a zero-based entry index. Input, output, node, and expansion limits apply across the document.
 
 ## Parameterized macros
 
 Keys in `options.macros` are new backslash commands made of ASCII letters. String replacements infer the argument count from the highest parameter marker. Use the tuple `[replacement, argumentCount, defaultFirstArgument?]` for explicit arity and an optional default. Required arguments accept a braced group or a single token. Write `##` to pass a literal parameter marker into a nested definition.
 
-Source supports `\newcommand`, `\renewcommand`, `\providecommand`, `\def`, `\gdef`, and `\let`. For example, `\def\swap(#1,#2){(#2,#1)}\swap(a,b)` renders `(b,a)`. Braces protect delimiters inside an argument. Definitions are local to their group or environment. `\gdef` makes a definition available for the rest of the current render. `\let` captures a command's current definition. Built-ins are protected and renders keep separate definition state.
+Source supports `\newcommand`, `\renewcommand`, `\providecommand`, `\def`, `\gdef`, `\edef`, `\xdef`, and `\let`. Eager definitions expand their replacements immediately, with `\noexpand` available to preserve a token. `\newenvironment` defines scoped opening and closing code. `\expandafter` and `\csname` use the same expansion budget. For example, `\def\swap(#1,#2){(#2,#1)}\swap(a,b)` renders `(b,a)`. Braces protect delimiters inside an argument. Definitions are local to their group or environment. Global definitions persist through the current expression or document render. `\let` captures a command's current definition. Built-ins are protected and renders keep separate definition state.
 
 ## Accessibility and security
 
 MathML is the default visual and semantic representation. Its layout and speech depend on the browser, math fonts, and assistive technology. The browser view uses the readable text artifact if native MathML is unavailable or `textOnly: true` is supplied. The SVG backend uses an accessible title and returns the companion MathML for contexts that can expose richer semantics. The SVG metrics are deterministic approximations in em units. Ascent is the distance above the baseline, descent is the distance below it, and the SVG adds 0.1 em of padding on each side. Actual glyph shapes depend on local fonts.
 
-The renderer encodes text in generated XML and emits a fixed set of tags and attributes. Browser mounting uses namespaced DOM elements and text nodes. Math source cannot add URLs, HTML, inline CSS, event handlers, or network resources. Display the `text` artifact as text. Macro values supplied through options are application configuration. Declarations in source use the same input and expansion limits.
+The renderer encodes text in generated XML and emits a fixed set of tags and attributes. Browser mounting uses namespaced DOM elements and text nodes. The engine rejects arbitrary HTML, URLs, inline CSS, and event handlers. Document references create validated same-page fragment links. Display the `text` artifact as text. Macro values supplied through options are application configuration. Declarations in source use the same input and expansion limits.
 
 | Limit | Default | Counts |
 | --- | ---: | --- |

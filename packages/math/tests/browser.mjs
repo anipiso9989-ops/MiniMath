@@ -7,7 +7,8 @@ import { after, before, test } from "node:test";
 import { build } from "esbuild";
 import { chromium } from "playwright-core";
 import { renderVisual } from "@mini/math/visual";
-import { createCompatibleRenderer } from "@mini/math/compat";
+import { renderAdvanced } from "@mini/math/advanced";
+import { renderDocument } from "@mini/math/document";
 
 const tex = String.raw;
 const mathNS = "http://www.w3.org/1998/Math/MathML";
@@ -24,15 +25,12 @@ before(async () => {
   });
   const assets = new Map(result.outputFiles.map((file) => ["/" + basename(file.path), file.contents]));
   chunks = [...assets.keys()].filter((path) => path.includes("advanced-"));
-  const compat = await build({
-    stdin: { contents: 'import { createCompatibleRenderer } from "@mini/math/compat"; window.renderCompatible = createCompatibleRenderer();', resolveDir: new URL("../", import.meta.url).pathname },
-    bundle: true, splitting: true, format: "esm", outdir: "out", entryNames: "compat", write: false,
-  });
-  for (const file of compat.outputFiles) assets.set("/" + basename(file.path), file.contents);
-  const render = createCompatibleRenderer();
-  const array = await render(tex`\begin{array}{lr}x&100\\100&x\end{array}`);
-  const tagged = await render(tex`\begin{equation}x=1\tag{5}\end{equation}`, { display: true });
-  assert.ok(array.ok && tagged.ok, JSON.stringify({ array, tagged }));
+  const array = renderAdvanced(tex`\begin{array}{lr}x&100\\100&x\end{array}`);
+  const numbered = renderDocument([
+    { source: tex`\eqref{target}` },
+    { source: tex`\begin{equation}x=1\label{target}\end{equation}`, display: true },
+  ], { numbering: "ams", idPrefix: "browser-" });
+  assert.ok(array.ok && numbered.ok, JSON.stringify({ array, numbered }));
   assets.set("/styles.css", readFileSync(new URL("../styles.css", import.meta.url)));
   server = createServer((request, response) => {
     const asset = assets.get(request.url);
@@ -41,11 +39,8 @@ before(async () => {
       return response.end(asset);
     }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-security-policy": csp });
-    if (request.url === "/compat-output") {
-      return response.end(`<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/styles.css"><div id="array">${array.artifact.mathml}</div><div id="tagged">${tagged.artifact.mathml}</div>`);
-    }
-    if (request.url === "/compat-page") {
-      return response.end('<!doctype html><meta charset="utf-8"><script type="module" src="/compat.js"></script>');
+    if (request.url === "/document") {
+      return response.end(`<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/styles.css"><div id="array">${array.artifact.mathml}</div><div id="references">${numbered.artifact.entries[0].mathml}</div><div id="tagged">${numbered.artifact.entries[1].mathml}</div>`);
     }
     response.end(`<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/styles.css"><div id="host"></div><div id="ssr">${svgFixture.mathml}${svgFixture.svg}</div><script type="module" src="/entry.js"></script>`);
   }).listen(0, "127.0.0.1");
@@ -181,48 +176,26 @@ test("mount updates, text fallback, cancellation and disposal own only the mount
   }
 });
 
-test("renders wider syntax in Chromium and loads each compatibility engine on demand under CSP", async () => {
+test("lays out native advanced arrays and navigates document equation links under strict CSP", async () => {
   const page = await browser.newPage();
   try {
-    const requested = [];
-    page.on("request", (request) => requested.push(new URL(request.url()).pathname));
-    await page.goto(url + "/compat-page");
-    const render = (source) => page.evaluate((input) => window.renderCompatible(input, { display: true }), source);
-    const ordinary = await render(tex`\binom{n}{k}`);
-    assert.equal(ordinary.artifact?.renderer, "native", JSON.stringify(ordinary));
-    assert.ok(!requested.some((path) => /\/(?:katex|mathjax)-/.test(path)));
-    const arrow = await render(tex`A\xrightarrow{f}B`);
-    assert.equal(arrow.artifact?.renderer, "katex", JSON.stringify(arrow));
-    assert.ok(requested.some((path) => path.startsWith("/katex-")));
-    assert.ok(!requested.some((path) => path.startsWith("/mathjax-")));
-    const tagged = await render(tex`\begin{equation}x=1\tag{5}\end{equation}`);
-    assert.equal(tagged.artifact?.renderer, "mathjax", JSON.stringify(tagged));
-    assert.match(tagged.artifact.mathml, /<mtext[^>]*>5<\/mtext>/);
-    assert.ok(requested.some((path) => path.startsWith("/mathjax-")));
-    assert.equal((await render(tex`\href{https://example.test}{x}`)).diagnostics?.[0].code, "blocked-command");
-  } finally {
-    await page.close();
-  }
-});
-
-test("lays out checked compatibility MathML and portable equation tags in Chromium", async () => {
-  const page = await browser.newPage();
-  try {
-    await page.goto(url + "/compat-output");
+    await page.goto(url + "/document");
     const result = await page.evaluate(() => {
       const cells = [...document.querySelectorAll("#array mtd")];
       const tag = document.querySelector("#tagged mtr mtd:last-child");
       return {
         alignment: cells.map((cell) => getComputedStyle(cell).textAlign),
         namespace: tag.namespaceURI,
-        label: tag.textContent.replace(/\s/g, ""),
+        label: tag.textContent,
         tagWidth: tag.getBoundingClientRect().width,
       };
     });
     assert.deepEqual(result.alignment, ["left", "right", "left", "right"]);
     assert.equal(result.namespace, mathNS);
-    assert.equal(result.label, "(5)");
+    assert.equal(result.label, "(1)");
     assert.ok(result.tagWidth > 0);
+    await page.locator('#references a[href="#browser-target"]').click();
+    assert.equal(new URL(page.url()).hash, "#browser-target");
   } finally {
     await page.close();
   }

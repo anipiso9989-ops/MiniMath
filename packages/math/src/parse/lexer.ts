@@ -18,11 +18,15 @@ const invalid = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF\uFFFE\uFFF
 
 export class Lexer {
   #frames: Frame[];
-  #expansions = 0;
-  #bytes = 0;
-
-  constructor(source: string, readonly limits: Limits, origin?: Range) {
+  constructor(
+    source: string, readonly limits: Limits, origin?: Range,
+    private readonly budget = { expansions: 0, bytes: 0 },
+  ) {
     this.#frames = [{ source, origin, position: 0 }];
+  }
+
+  fork(source: string, origin: Range): Lexer {
+    return new Lexer(source, this.limits, origin, this.budget);
   }
 
   #range(frame: Frame, start: number): Range {
@@ -30,13 +34,17 @@ export class Lexer {
   }
 
   expand(source: string, origin: Range): void {
-    if (++this.#expansions > this.limits.maxExpansions) {
+    if (++this.budget.expansions > this.limits.maxExpansions) {
       fail("expansion-limit", "Macro expansion limit exceeded.", origin);
     }
     if (source.length > this.limits.maxInputBytes ||
-        (this.#bytes += byteLength(source)) > this.limits.maxInputBytes) {
+        (this.budget.bytes += byteLength(source)) > this.limits.maxInputBytes) {
       fail("expansion-limit", "Expanded macro text exceeds the UTF-8 byte limit.", origin);
     }
+    this.insert(source, origin);
+  }
+
+  insert(source: string, origin: Range): void {
     if (source) this.#frames.push({ source, origin, position: 0 });
   }
 
@@ -72,18 +80,20 @@ export class Lexer {
     }
   }
 
-  rawGroup(open: Token, depth: number): string {
+  rawGroup(open: Token, depth: number, preserveGroups: boolean, preserveCommands = false): string {
     let nesting = 1;
     let text = "";
     for (let token = this.read(true); token.value; token = this.read(true)) {
       const { value, range } = token;
       if (value === "}") {
         if (--nesting === 0) return text;
+        if (preserveGroups) text += value;
       } else if (value === "{") {
+        if (preserveGroups) text += value;
         if (depth + nesting++ > this.limits.maxDepth) {
           fail("depth-limit", "Maximum nesting depth exceeded.", range);
         }
-      } else if (value[0] === "\\") {
+      } else if (value[0] === "\\" && !preserveCommands) {
         const escaped = value.slice(1);
         if (escaped.length !== 1 || !"{}\\$%&#_ ".includes(escaped)) {
           fail("syntax", "Unsupported text escape.", range);
@@ -94,6 +104,24 @@ export class Lexer {
       }
     }
     return fail("syntax", "Expected a closing brace.", open.range);
+  }
+
+  verbatim(range: Range): string {
+    const frame = this.#frames[this.#frames.length - 1];
+    const starred = frame.source[frame.position] === "*";
+    if (starred) frame.position++;
+    if (frame.position === frame.source.length || white.test(frame.source[frame.position])) {
+      fail("syntax", "Expected a verbatim delimiter.", range);
+    }
+    const delimiter = this.#character(frame);
+    let value = "";
+    while (frame.position < frame.source.length) {
+      const char = this.#character(frame);
+      if (char === delimiter) return starred ? value.replace(/ /g, "␣") : value;
+      if (char === "\r" || char === "\n") break;
+      value += char;
+    }
+    return fail("syntax", "Unclosed verbatim expression.", range);
   }
 
   #character(frame: Frame): string {

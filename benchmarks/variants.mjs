@@ -7,6 +7,7 @@ export const bundles = {
   "MiniMath MathML": 'export { render } from "@mini/math";',
   "MiniMath advanced MathML": 'export { renderAdvanced } from "@mini/math/advanced";',
   "MiniMath lazy advanced": 'export { render } from "@mini/math"; export const load = () => import("@mini/math/advanced");',
+  "MiniMath document": 'export { renderDocument } from "@mini/math/document";',
   "MiniMath browser mount": 'export { mount } from "@mini/math/browser";',
   "MiniMath SVG + MathML": 'export { renderVisual } from "@mini/math/visual";',
   "MiniMath advanced SVG + MathML": 'export { renderAdvancedVisual } from "@mini/math/advanced/visual";',
@@ -29,25 +30,25 @@ export const renderers = {
   "MiniMath advanced": { ...mini("renderAdvanced", "@mini/math/advanced"), workloads: ["matrices", "macros"] },
   "KaTeX": {
     workloads: ["core", "matrices", "macros"],
-    browser: 'import { renderToString } from "katex"; globalThis.convert = (source) => renderToString(source, { output: "mathml", displayMode: true, trust: false });',
+    browser: 'import { renderToString } from "./benchmarks/reference/katex.mjs"; globalThis.convert = (source) => renderToString(source, { output: "mathml", displayMode: true, trust: false });',
     async load() {
-      const { renderToString } = await import("katex");
+      const { renderToString } = await import("./reference/katex.mjs");
       return (source) => renderToString(source, { output: "mathml", displayMode: true, trust: false });
     },
   },
   "MathJax": {
     workloads: ["core", "matrices"],
-    browser: 'import { createMathML } from "./benchmarks/mathjax.mjs"; globalThis.convert = createMathML();',
+    browser: 'import { createMathML } from "./benchmarks/reference/mathjax.mjs"; globalThis.convert = createMathML();',
     async load() {
-      const { createMathML } = await import("./mathjax.mjs");
+      const { createMathML } = await import("./reference/mathjax.mjs");
       return createMathML();
     },
   },
   "MathJax with macros": {
     workloads: ["macros"],
-    browser: 'import { createMacroMathML } from "./benchmarks/mathjax-macros.mjs"; globalThis.convert = createMacroMathML();',
+    browser: 'import { createMacroMathML } from "./benchmarks/reference/mathjax-macros.mjs"; globalThis.convert = createMacroMathML();',
     async load() {
-      const { createMacroMathML } = await import("./mathjax-macros.mjs");
+      const { createMacroMathML } = await import("./reference/mathjax-macros.mjs");
       return createMacroMathML();
     },
   },

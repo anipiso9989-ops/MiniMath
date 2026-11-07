@@ -6,10 +6,10 @@ import { SerializedMmlVisitor } from "@mathjax/src/js/core/MmlTree/SerializedMml
 import { STATE } from "@mathjax/src/js/core/MathItem.js";
 import "@mathjax/src/js/input/tex/ams/AmsConfiguration.js";
 
-export function createMathML(packages = ["base", "ams"]) {
+export function createMathML(packages = ["base", "ams"], outputJax) {
   RegisterHTMLHandler(liteAdaptor());
   const tex = new TeX({ packages, formatError(_jax, error) { throw error; } });
-  const document = mathjax.document("", { InputJax: tex });
+  const document = mathjax.document("", { InputJax: tex, ...(outputJax && { OutputJax: outputJax }) });
   const visitor = new SerializedMmlVisitor();
   return (source) => visitor.visitTree(document.convert(source, { display: true, end: STATE.CONVERT }));
 }

@@ -5,5 +5,5 @@ import { advancedExtensions } from "./advanced.js";
 import type { AdvancedOptions } from "./advanced.js";
 
 export function renderAdvancedVisual(source: string, options: AdvancedOptions = {}): Result<VisualArtifact> {
-  return visualMath(source, options, advancedExtensions(options.macros));
+  return visualMath(source, options, advancedExtensions(options));
 }

@@ -38,3 +38,22 @@ export const compatibility = {
   "Arrays with column specifications": tex`\begin{array}{lr}a&b\\c&d\end{array}`,
   "Equation tags": tex`\begin{equation}x=1\tag{5}\end{equation}`,
 };
+
+export const extendedCoverage = {
+  "Scope-dependent math choice": tex`x^{\mathchoice{D}{T}{S}{Z}}`,
+  "Left subscripts and superscripts": tex`\prescript{14}{6}{C}`,
+  "Custom environments": tex`\newenvironment{braced}{\left(}{\right)}\begin{braced}x\end{braced}`,
+  "Generalized fractions": tex`\genfrac{[}{]}{0pt}{0}{a}{b}`,
+  "Box and spacing commands": tex`\smash[t]{x}+\raisebox{1em}{y}+\rule{1em}{1pt}`,
+  "Reaction labels": tex`\ce{2H2 + O2 ->[heat] 2H2O}`,
+  "Physics derivative and delimiters": tex`\pdv{f}{x}{y}+\qty(x)`,
+  "Commutative diagrams": tex`\begin{CD}A@>f>>B\\@VVV @AAA\\C@>>>D\end{CD}`,
+  "Proof trees": tex`\begin{prooftree}\AxiomC{$A$}\UnaryInfC{$B$}\end{prooftree}`,
+  "Sided operator scripts": tex`\sideset{_a^b}{_c^d}\sum`,
+  "Cancellation with a target": tex`\cancelto{0}{x}`,
+  "Custom MathML enclosures": tex`\enclose{circle}{x}`,
+  "Infix fractions with explicit delimiters": tex`{a\overwithdelims()b}`,
+  "Interactive math tooltips": tex`\texttip{x}{description}`,
+  "Custom box padding and borders": tex`\bbox[5px,border:2px solid red]{x}`,
+  "TeX character codes": tex`\char"221E`,
+};
