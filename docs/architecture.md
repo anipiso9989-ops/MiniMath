@@ -10,6 +10,10 @@ MiniMath implements the Mini math engine as `packages/math` in a pnpm TypeScript
 4. When the SVG subpath is selected, convert the AST to positioned boxes using local deterministic advance and vertical metrics. Emit SVG from those boxes and preserve MathML as the companion semantic representation.
 5. The browser view owns its wrapper and generation number. Optional grammar loading is asynchronous. The most recent generation owns the commit, and disposal invalidates pending work. Rendering keeps no process-wide expression or layout cache.
 
+## Compatibility boundary
+
+The native root and advanced renderer have no peer imports. An opt-in router tries the native advanced renderer and lazily loads the KaTeX and MathJax peer adapters. Applications can select an adapter directly for deterministic parser semantics or configure the MathJax TeX packages needed by their documents. The adapters return MathML through a structural check that enforces output size, node and nesting limits, strips resource and markup attributes, and translates portable table alignment and equation labels. Core browser mounting and SVG continue to use the native AST.
+
 ## Library review
 
 | Reference | Design studied | MiniMath decision |

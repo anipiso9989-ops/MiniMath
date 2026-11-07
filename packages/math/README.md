@@ -1,6 +1,6 @@
 # @mini/math
 
-MiniMath renders TeX-like mathematics in Node.js 20+ and modern browsers. The package is ESM with TypeScript declarations and zero runtime dependencies.
+MiniMath renders TeX-like mathematics in Node.js 20+ and modern browsers. The package is ESM with TypeScript declarations. Native rendering has zero runtime dependencies. The optional compatibility entry points use separately installed peers.
 
 ## API
 
@@ -11,10 +11,13 @@ MiniMath renders TeX-like mathematics in Node.js 20+ and modern browsers. The pa
 | `@mini/math/visual` | `renderVisual` returns SVG, MathML, readable text, and layout metrics. |
 | `@mini/math/advanced/visual` | `renderAdvancedVisual` adds the advanced grammar to the SVG renderer. |
 | `@mini/math/browser` | `mount(container, source, options?)` owns a browser view. |
+| `@mini/math/compat` | `createCompatibleRenderer` tries the native engine first and loads compatibility engines on demand. |
+| `@mini/math/compat/katex` | `renderKaTeX` selects the KaTeX parser and returns checked MathML. |
+| `@mini/math/compat/mathjax` | `createMathJaxRenderer` selects a MathJax TeX package profile and returns a synchronous MathML renderer after setup. |
 | `@mini/math/integration` | `integration` exposes the versioned MiniRender protocol adapter for the core renderer. |
 | `@mini/math/styles.css` | Explicit left and right cell alignment rules for MathML cases and aligned equations. |
 
-All synchronous functions return `{ ok: true, artifact, diagnostics: [] }` on success or `{ ok: false, diagnostics }` on input errors. Diagnostics report a stable code and, where available, a half-open UTF-16 range in the original string. Invalid application configuration, such as a negative resource limit, throws. `display: true` requests block MathML and display-style SVG layout. The default is inline math.
+Synchronous render functions return `{ ok: true, artifact, diagnostics: [] }` on success or `{ ok: false, diagnostics }` on input errors. Diagnostics report a stable code and, where available, a half-open UTF-16 range in the original string. Invalid application configuration, such as a negative resource limit, throws. `display: true` requests block MathML and display-style SVG layout. The default is inline math.
 
 ```ts
 import { render } from "@mini/math";
@@ -65,14 +68,44 @@ Mount replaces the container's children with a view it owns. Enable `advanced: t
 | --- | --- |
 | Atoms and grouping | Unicode letters and combining marks, ASCII integers and decimals, Unicode operators and punctuation, and braced groups. Spaces are ignored in math mode. `%` starts a line comment. |
 | Equations and scripts | Relations such as `=`, `<`, `\leq`, `\ne`, and `\approx`. Subscripts and superscripts use `_` and `^`. Apostrophes form prime superscripts. |
-| Fractions and roots | `\frac{a}{b}`, `\sqrt{x}`, and `\sqrt[n]{x}`. A single token can replace a braced argument, as in `\frac12` or `x^2`. Brace multi-token arguments. |
+| Fractions and roots | `\frac{a}{b}`, `\sqrt{x}`, and `\sqrt[n]{x}`. Use `\binom{n}{k}` for binomials and `\dfrac`, `\tfrac`, `\dbinom`, or `\tbinom` to force display or text style. A single token can replace a braced argument, as in `\frac12` or `x^2`. Brace multi-token arguments. |
 | Delimiters | Literal parentheses, brackets, and bars. `\left` and `\right` make delimiters stretch. A dot after either command makes that side invisible. |
-| Symbols and named operators | Greek letters and variants, common set and logical operators, arrows, `\sum`, `\prod`, `\int`, `\lim`, and named functions such as `\sin`, `\log`, and `\det`. The command tables are in [symbols.ts](src/parse/symbols.ts). |
+| Symbols and named operators | Greek letters and variants, blackboard bold for Latin letters and digits via `\mathbb`, common set and logical operators, arrows, `\sum`, `\prod`, `\int`, `\lim`, and named functions such as `\sin`, `\log`, and `\det`. The command tables are in [symbols.ts](src/parse/symbols.ts). |
 | Prose and spacing | `\text{...}`, `\,`, `\:`, `\;`, backslash-space, `\quad`, and `\qquad`. Inside text, backslash escapes braces, backslash, space, dollar, percent, ampersand, hash, and underscore. |
 | Advanced environments | `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`, `Vmatrix`, `aligned`, `align`, `align*`, `cases`, `equation`, and `equation*`. Separate cells with `&` and rows with two backslashes. Tables are rectangular and cases have two columns. Empty cells and a final row separator are accepted. Equations are unnumbered. |
 | Advanced macros | Configured macros and source declarations support up to nine arguments, a first optional argument with a default, nested calls, and repeated or reordered parameters. |
 
-Pass the expression body directly. Surrounding `$` or `$$`, arbitrary TeX packages and equation numbering and references are outside this profile. The package typesets equations and matrices. It takes TeX-like source and emits presentation MathML.
+The native profile takes the expression body directly. Surrounding `$` or `$$`, arbitrary TeX packages and equation numbering and references are outside this profile. The package typesets equations and matrices. It takes TeX-like source and emits presentation MathML.
+
+## Broader LaTeX coverage
+
+For automatic routing, install both optional peers. The version pair below is used in tests and benchmarks.
+
+```sh
+npm install katex@0.19.1 @mathjax/src@4.1.3
+```
+
+```ts
+import { createCompatibleRenderer } from "@mini/math/compat";
+
+const render = createCompatibleRenderer();
+const result = await render(String.raw`\begin{equation}x=1\tag{5}\end{equation}`, { display: true });
+if (result.ok) {
+  console.log(result.artifact.renderer); // mathjax
+  console.log(result.artifact.mathml);
+}
+```
+
+The router first attempts the native advanced parser. KaTeX loads after a native syntax miss and MathJax loads if KaTeX cannot render the expression. Limits, cancellation, and blocked commands end the attempt. Bundlers with ESM code splitting fetch the peer code when that renderer is first needed. Direct adapter imports let you install only the chosen peer and choose its parser for every expression. Use the MathJax adapter to select packages such as `physics`, `mathtools`, or `bussproofs`, and to configure automatic numbering.
+
+```ts
+import { createMathJaxRenderer } from "@mini/math/compat/mathjax";
+
+const render = await createMathJaxRenderer({ packages: ["physics", "mhchem"], tags: "ams" });
+const result = render(String.raw`\qty(x)\quad\ce{H2O}`);
+```
+
+Each expression runs through one parser. The default profiles cover the demonstrated gaps, and direct adapters expose additional grammar through installed packages. Compatibility output is checked MathML with the source as plain-text fallback. The original engines' HTML/SVG styling, document-wide equation numbering state, arbitrary HTML, URLs, and input-triggered package loading are outside the compatibility surface. Imports and configured package loads can reject if a peer or chunk is unavailable. Use the alignment stylesheet for MathML table alignment in browsers.
 
 ## Parameterized macros
 
@@ -84,7 +117,7 @@ Source supports `\newcommand`, `\renewcommand`, `\providecommand`, `\def`, `\gde
 
 MathML is the default visual and semantic representation. Its layout and speech depend on the browser, math fonts, and assistive technology. The browser view uses the readable text artifact if native MathML is unavailable or `textOnly: true` is supplied. The SVG backend uses an accessible title and returns the companion MathML for contexts that can expose richer semantics. The SVG metrics are deterministic approximations in em units. Ascent is the distance above the baseline, descent is the distance below it, and the SVG adds 0.1 em of padding on each side. Actual glyph shapes depend on local fonts.
 
-The renderer encodes text in generated XML and emits a fixed set of tags and attributes. Browser mounting uses namespaced DOM elements and text nodes. Math source cannot add URLs, HTML, styles, event handlers, or network resources. Display the `text` artifact as text. Macro values supplied through options are application configuration. Declarations in source use the same input and expansion limits.
+The renderer encodes text in generated XML and emits a fixed set of tags and attributes. Browser mounting uses namespaced DOM elements and text nodes. Math source cannot add URLs, HTML, inline CSS, event handlers, or network resources. Display the `text` artifact as text. Macro values supplied through options are application configuration. Declarations in source use the same input and expansion limits.
 
 | Limit | Default | Counts |
 | --- | ---: | --- |

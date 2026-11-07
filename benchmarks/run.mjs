@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { arch, cpus, platform } from "node:os";
-import { relative } from "node:path";
+import { basename, relative } from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import { build, version as esbuild } from "esbuild";
 import { bundles, fixtures, renderers } from "./variants.mjs";
 import { compatibility } from "./fixtures.mjs";
+import { createCompatibleRenderer } from "@mini/math/compat";
 
 const repeats = 7;
 const median = (values) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
@@ -39,6 +40,62 @@ async function size(contents, splitting) {
     initial: filesSize(outputFiles.filter((file) => staticFiles.has(relative(process.cwd(), file.path)))),
     deferred: filesSize(outputFiles.filter((file) => !staticFiles.has(relative(process.cwd(), file.path)))),
   };
+}
+
+async function compatibilitySamples(browser) {
+  const { outputFiles } = await bundle(
+    'import { createCompatibleRenderer } from "@mini/math/compat"; globalThis.compat = createCompatibleRenderer();',
+    true,
+  );
+  const files = new Map(outputFiles.map((file) => ["/" + basename(file.path), file]));
+  const fetched = new Set();
+  const page = await browser.newPage();
+  try {
+    await page.route("http://compat.test/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const file = files.get(path);
+      if (file) {
+        fetched.add(file);
+        return route.fulfill({ contentType: "text/javascript", body: file.text });
+      }
+      return route.fulfill({ contentType: "text/html", body: '<!doctype html><meta charset="utf-8"><script type="module" src="/entry.js"></script>' });
+    });
+    await page.goto("http://compat.test/");
+    const results = { initial: filesSize([...fetched]) };
+    for (const [renderer, source] of [
+      ["native", compatibility["Binomial coefficients"]],
+      ["katex", compatibility["Labeled arrows"]],
+      ["mathjax", compatibility["Equation tags"]],
+    ]) {
+      const before = new Set(fetched);
+      const measurement = await page.evaluate(async ({ renderer, source, repeats }) => {
+        async function render() {
+          const result = await globalThis.compat(source, { display: true });
+          if (!result.ok || result.artifact.renderer !== renderer) throw new Error(JSON.stringify(result));
+        }
+        const start = performance.now();
+        await render();
+        const firstMs = performance.now() - start;
+        const batch = async () => {
+          const start = performance.now();
+          for (let i = 0; i < 256; i++) await render();
+          return (performance.now() - start) * 1000 / 256;
+        };
+        await batch();
+        const warm = [];
+        for (let i = 0; i < repeats; i++) warm.push(await batch());
+        return { firstMs, warm };
+      }, { renderer, source, repeats });
+      results[renderer] = {
+        fetched: filesSize([...fetched].filter((file) => !before.has(file))),
+        firstMs: measurement.firstMs,
+        warmUs: median(measurement.warm),
+      };
+    }
+    return results;
+  } finally {
+    await page.close();
+  }
 }
 
 async function browserSamples() {
@@ -75,7 +132,7 @@ async function browserSamples() {
       }
       await page.close();
     }
-    return { chromium: browser.version(), batchSize: 256, medianMs: results };
+    return { chromium: browser.version(), batchSize: 256, medianMs: results, compatibility: await compatibilitySamples(browser) };
   } finally {
     await browser.close();
   }
@@ -109,5 +166,12 @@ for (const [name, variant] of Object.entries(renderers)) {
       Object.keys(samples[0]).map((metric) => [metric, median(samples.map((sample) => sample[metric]))]));
   }
 }
+const renderCompatible = createCompatibleRenderer();
+output.compatibility["MiniMath with compatibility"] = Object.fromEntries(await Promise.all(
+  Object.entries(compatibility).map(async ([label, source]) => {
+    const result = await renderCompatible(source, { display: true });
+    return [label, result.ok ? result.artifact.renderer : false];
+  }),
+));
 if (process.argv.includes("--browser")) output.browser = await browserSamples();
 process.stdout.write(JSON.stringify(output, null, 2) + "\n");

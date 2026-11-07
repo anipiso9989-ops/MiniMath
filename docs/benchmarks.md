@@ -10,13 +10,13 @@ Values are bytes. Each row is a separate minified ESM browser build targeting ES
 
 | Consumer import | Initial raw | Initial gzip | Initial Brotli | Deferred raw | Deferred gzip | Deferred Brotli |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| MiniMath parse only | 9,542 | 3,820 | 3,370 | — | — | — |
-| MiniMath MathML | 12,349 | 4,848 | 4,296 | — | — | — |
-| MiniMath advanced MathML | 19,707 | 7,333 | 6,516 | — | — | — |
-| MiniMath lazy advanced | 12,661 | 5,058 | 4,481 | 7,393 | 2,948 | 2,635 |
-| MiniMath browser mount | 13,481 | 5,526 | 4,878 | 7,393 | 2,949 | 2,636 |
-| MiniMath SVG + MathML | 17,144 | 6,941 | 6,141 | — | — | — |
-| MiniMath advanced SVG + MathML | 24,495 | 9,434 | 8,393 | — | — | — |
+| MiniMath parse only | 10,492 | 4,219 | 3,720 | — | — | — |
+| MiniMath MathML | 13,544 | 5,315 | 4,701 | — | — | — |
+| MiniMath advanced MathML | 20,957 | 7,817 | 6,940 | — | — | — |
+| MiniMath lazy advanced | 13,905 | 5,548 | 4,907 | 7,393 | 2,948 | 2,635 |
+| MiniMath browser mount | 14,730 | 6,020 | 5,317 | 7,393 | 2,948 | 2,636 |
+| MiniMath SVG + MathML | 18,385 | 7,422 | 6,597 | — | — | — |
+| MiniMath advanced SVG + MathML | 25,788 | 9,927 | 8,792 | — | — | — |
 | MiniMath alignment CSS | 78 | 69 | 59 | — | — | — |
 | KaTeX MathML | 267,681 | 76,951 | 63,916 | — | — | — |
 | MathJax MathML | 249,665 | 74,137 | 60,394 | — | — | — |
@@ -30,15 +30,15 @@ Heap columns use V8 heap-used readings after three explicit garbage collections.
 
 | Renderer and workload | Import and setup (ms) | First render (ms) | Warm (µs/expression) | Loaded heap (KiB) | Warm heap change (KiB) | Output (bytes) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| MiniMath (core) | 5.43 | 1.76 | 11.20 | 326 | -2 | 2,683 |
-| MiniMath advanced (matrices) | 6.36 | 1.74 | 12.41 | 378 | -45 | 2,474 |
-| MiniMath advanced (macros) | 6.05 | 2.34 | 15.74 | 377 | -34 | 1,279 |
-| KaTeX (core) | 14.82 | 2.44 | 25.61 | 2,611 | -16 | 3,464 |
-| KaTeX (matrices) | 14.11 | 3.73 | 34.12 | 2,660 | +159 | 4,786 |
-| KaTeX (macros) | 14.07 | 2.67 | 25.30 | 2,599 | +76 | 2,366 |
-| MathJax (core) | 65.17 | 6.48 | 343.04 | 3,026 | +325 | 5,875 |
-| MathJax (matrices) | 62.82 | 7.54 | 379.64 | 3,046 | -1,031 | 5,386 |
-| MathJax with macros (macros) | 60.83 | 6.33 | 241.93 | 2,999 | +322 | 3,004 |
+| MiniMath (core) | 4.88 | 1.50 | 10.70 | 333 | +9 | 2,683 |
+| MiniMath advanced (matrices) | 5.90 | 1.88 | 11.38 | 385 | -58 | 2,474 |
+| MiniMath advanced (macros) | 6.01 | 2.49 | 16.32 | 384 | +31 | 1,279 |
+| KaTeX (core) | 13.61 | 2.41 | 26.93 | 2,611 | -79 | 3,464 |
+| KaTeX (matrices) | 14.39 | 3.80 | 33.71 | 2,660 | +71 | 4,786 |
+| KaTeX (macros) | 14.47 | 2.64 | 25.46 | 2,599 | +76 | 2,366 |
+| MathJax (core) | 60.68 | 5.52 | 338.13 | 3,026 | +325 | 5,875 |
+| MathJax (matrices) | 68.55 | 7.72 | 366.22 | 3,046 | -1,028 | 5,386 |
+| MathJax with macros (macros) | 60.08 | 6.45 | 238.98 | 2,999 | +398 | 3,004 |
 
 ## Chromium rendering
 
@@ -46,30 +46,41 @@ Chromium 153.0.8010.0. Each timed batch serializes 256 display expressions, inse
 
 | Renderer and workload | Median per 256 expressions (ms) |
 | --- | ---: |
-| MiniMath (core) | 33.40 |
-| MiniMath advanced (matrices) | 42.10 |
-| MiniMath advanced (macros) | 18.80 |
-| KaTeX (core) | 39.60 |
-| KaTeX (matrices) | 48.60 |
-| KaTeX (macros) | 24.80 |
-| MathJax (core) | 102.40 |
-| MathJax (matrices) | 114.10 |
-| MathJax with macros (macros) | 67.90 |
+| MiniMath (core) | 35.20 |
+| MiniMath advanced (matrices) | 37.50 |
+| MiniMath advanced (macros) | 18.60 |
+| KaTeX (core) | 37.10 |
+| KaTeX (matrices) | 53.20 |
+| KaTeX (macros) | 25.80 |
+| MathJax (core) | 126.60 |
+| MathJax (matrices) | 143.10 |
+| MathJax with macros (macros) | 61.30 |
 
-## Macro update and syntax coverage
+## Syntax coverage
 
-The previous core MathML build was 4,823 bytes gzip. The updated build is 4,848 bytes gzip. In the split build, the deferred advanced chunk grew from 962 to 2,948 bytes gzip.
+The previous native core MathML build was 4,848 bytes gzip. Adding native binomials, fraction styles, and basic blackboard bold brought it to 5,315 bytes gzip.
 
 The following probes record whether each configured engine emitted MathML without a parse error. The shared macro timing corpus includes required arguments, delimited definitions, aliases, and a matrix inside a macro. Optional defaults are probed separately so the timing corpus stays comparable.
 
-| Syntax probe | MiniMath advanced | KaTeX | MathJax with macros |
-| --- | --- | --- | --- |
-| Optional default in newcommand | Accepted | Rejected | Accepted |
-| Eager edef definition | Rejected | Accepted | Rejected |
-| Blackboard bold | Rejected | Accepted | Accepted |
-| Binomial coefficients | Rejected | Accepted | Accepted |
-| Labeled arrows | Rejected | Accepted | Accepted |
-| Arrays with column specifications | Rejected | Accepted | Accepted |
-| Equation tags | Rejected | Accepted | Accepted |
+| Syntax probe | MiniMath native advanced | KaTeX | MathJax with macros | MiniMath with compatibility |
+| --- | --- | --- | --- | --- |
+| Optional default in newcommand | Accepted | Rejected | Accepted | Native |
+| Eager edef definition | Rejected | Accepted | Rejected | KaTeX |
+| Blackboard bold | Accepted | Accepted | Accepted | Native |
+| Binomial coefficients | Accepted | Accepted | Accepted | Native |
+| Labeled arrows | Rejected | Accepted | Accepted | KaTeX |
+| Arrays with column specifications | Rejected | Accepted | Accepted | KaTeX |
+| Equation tags | Rejected | Accepted | Accepted | MathJax |
+
+## Browser compatibility loading cost
+
+The compatibility router starts with the native advanced renderer. The table counts minified JavaScript files actually requested at each step of one Chromium session. First render time includes module loading from the local benchmark route. Warm time measures MathML serialization and checking after loading, using the median of seven batches of 256 calls. This timing path skips DOM insertion and layout.
+
+| Router step | Additional raw bytes | Additional gzip bytes | First render (ms) | Warm (µs/expression) |
+| --- | ---: | ---: | ---: | ---: |
+| Initial router and native advanced engine | 21,634 | 8,367 | — | — |
+| Native binomial | 0 | 0 | 2.30 | 5.08 |
+| KaTeX labeled arrow | 304,492 | 86,911 | 26.90 | 43.36 |
+| MathJax equation tag after KaTeX | 322,923 | 106,186 | 49.20 | 439.84 |
 
 The results apply to these fixtures and configurations on this machine. MiniMath implements a narrower TeX profile. Feature coverage and output markup vary across engines.

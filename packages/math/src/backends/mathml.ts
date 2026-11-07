@@ -47,7 +47,7 @@ function leaf(sink: MathSink, tag: string, value: string, attr?: string, attrVal
 function atom(node: Atom, sink: MathSink): void {
   switch (node.role) {
     case "number": return leaf(sink, "mn", node.value);
-    case "identifier": return leaf(sink, "mi", node.value);
+    case "identifier": return leaf(sink, "mi", node.value, node.upright ? "mathvariant" : undefined, "normal");
     case "function": return leaf(sink, "mi", node.value, "mathvariant", "normal");
     case "text": return leaf(sink, "mtext", node.value);
     case "large": return leaf(sink, "mo", node.value, "movablelimits", "true");
@@ -67,10 +67,14 @@ function emit(node: MathNode, sink: MathSink): void {
       sink.open("mspace", "width", `${node.width}em`);
       return sink.close("mspace");
     case "fraction":
-      sink.open("mfrac");
+      if (node.display !== undefined) sink.open("mstyle", "displaystyle", String(node.display));
+      if (node.bar === false) sink.open("mfrac", "linethickness", "0");
+      else sink.open("mfrac");
       emit(node.top, sink);
       emit(node.bottom, sink);
-      return sink.close("mfrac");
+      sink.close("mfrac");
+      if (node.display !== undefined) sink.close("mstyle");
+      return;
     case "root": {
       const tag = node.index ? "mroot" : "msqrt";
       sink.open(tag);
@@ -116,7 +120,9 @@ export function readable(node: MathNode): string {
     case "atom": return node.value;
     case "row": return node.children.map(readable).join(" ");
     case "space": return "";
-    case "fraction": return `(${readable(node.top)}) / (${readable(node.bottom)})`;
+    case "fraction": return node.bar === false
+      ? `${readable(node.top)} choose ${readable(node.bottom)}`
+      : `(${readable(node.top)}) / (${readable(node.bottom)})`;
     case "root": return node.index
       ? `root of order (${readable(node.index)}) of (${readable(node.body)})`
       : `square root of (${readable(node.body)})`;

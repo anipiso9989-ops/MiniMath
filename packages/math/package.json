@@ -21,10 +21,25 @@
     "./visual": "./dist/backends/visual.js",
     "./integration": "./dist/integration.js",
     "./styles.css": "./styles.css",
-    "./advanced/visual": "./dist/features/advanced-visual.js"
+    "./advanced/visual": "./dist/features/advanced-visual.js",
+    "./compat": "./dist/compat/index.js",
+    "./compat/katex": "./dist/compat/katex.js",
+    "./compat/mathjax": "./dist/compat/mathjax.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@mathjax/src": "^4.1.3",
+    "katex": "^0.19.1"
+  },
+  "peerDependenciesMeta": {
+    "@mathjax/src": {
+      "optional": true
+    },
+    "katex": {
+      "optional": true
+    }
   }
 }

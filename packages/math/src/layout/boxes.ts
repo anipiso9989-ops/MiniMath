@@ -109,7 +109,7 @@ function table(node: Table, size: number): Box {
 
 function layout(node: MathNode, size: number, display: boolean): Box {
   switch (node.kind) {
-    case "atom": return glyph(node.value, display && (node.role === "large" || node.role === "integral") ? size * 1.22 : size, node.role === "identifier");
+    case "atom": return glyph(node.value, display && (node.role === "large" || node.role === "integral") ? size * 1.22 : size, node.role === "identifier" && !node.upright);
     case "space": return gap(node.width * size);
     case "row": {
       const boxes: Box[] = [];
@@ -122,7 +122,7 @@ function layout(node: MathNode, size: number, display: boolean): Box {
       return row(boxes);
     }
     case "fraction": {
-      const fractionSize = display ? size : scriptSize(size);
+      const fractionSize = (node.display ?? display) ? size : scriptSize(size);
       const top = layout(node.top, fractionSize, false);
       const bottom = layout(node.bottom, fractionSize, false);
       const width = Math.max(top.width, bottom.width) + 0.24 * size;
@@ -130,7 +130,7 @@ function layout(node: MathNode, size: number, display: boolean): Box {
       const separation = 0.15 * size;
       return measured(width, [
         { x: (width - top.width) / 2, y: axis - separation - top.descent, box: top },
-        { x: 0, y: axis, box: stroke([[0, 0], [width, 0]], 0.055 * size) },
+        ...(node.bar === false ? [] : [{ x: 0, y: axis, box: stroke([[0, 0], [width, 0]], 0.055 * size) }]),
         { x: (width - bottom.width) / 2, y: axis + separation + bottom.ascent, box: bottom },
       ]);
     }

@@ -1,4 +1,5 @@
-import type { AtomRole } from "../model/types.js";
+import { fail } from "../model/limits.js";
+import type { AtomRole, MathNode, Range } from "../model/types.js";
 
 const greek: Readonly<Record<string, string>> = {
   alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ϵ", varepsilon: "ε",
@@ -53,4 +54,21 @@ export function symbol(command: string): readonly [AtomRole, string] | undefined
   if (command.length === 1 && escapes.includes(command)) return ["operator", command];
   const fence = delimiter("\\" + command);
   if (fence) return ["operator", fence];
+}
+
+const doubleStruckCapitals = "𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ";
+const capitals = Array.from(doubleStruckCapitals);
+
+export function blackboard(node: MathNode, range: Range): MathNode {
+  if (node.kind === "row") return { ...node, children: node.children.map((child) => blackboard(child, range)) };
+  if (node.kind === "atom" && (node.role === "identifier" || node.role === "number") && /^[A-Za-z0-9]+$/.test(node.value)) {
+    let value = "";
+    for (const char of node.value) {
+      const code = char.charCodeAt(0);
+      value += code < 58 ? String.fromCodePoint(0x1d7d8 + code - 48)
+        : code < 91 ? capitals[code - 65] : String.fromCodePoint(0x1d552 + code - 97);
+    }
+    return { ...node, value, upright: true };
+  }
+  return fail("feature-required", "This blackboard-bold expression requires a compatibility renderer.", range);
 }

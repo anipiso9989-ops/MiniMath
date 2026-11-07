@@ -2,7 +2,7 @@ import { checkAbort, fail } from "../model/limits.js";
 import type { Limits, MathNode, Range, Row } from "../model/types.js";
 import { Lexer } from "./lexer.js";
 import type { Token } from "./lexer.js";
-import { delimiter, space, symbol } from "./symbols.js";
+import { blackboard, delimiter, space, symbol } from "./symbols.js";
 
 export interface Extensions {
   readonly macro?: (lexer: Lexer, token: Token) => boolean;
@@ -14,7 +14,7 @@ const digit = /^[0-9]$/;
 const letter = /^\p{L}$/u;
 const mark = /^\p{M}$/u;
 const operator = /^[\p{S}\p{P}]$/u;
-const fixed = new Set(["frac", "sqrt", "text", "left", "right", "begin", "end"]);
+const fixed = new Set(["frac", "dfrac", "tfrac", "binom", "dbinom", "tbinom", "mathbb", "sqrt", "text", "left", "right", "begin", "end"]);
 
 export function isBuiltin(command: string): boolean {
   return fixed.has(command) || symbol(command) !== undefined || space(command) !== undefined;
@@ -161,9 +161,21 @@ export class Parser {
     const name = value.slice(1);
     switch (name) {
       case "frac":
-        return this.create({
+      case "dfrac":
+      case "tfrac":
+      case "binom":
+      case "dbinom":
+      case "tbinom": {
+        const binomial = name.endsWith("binom");
+        const fraction = this.create<MathNode>({
           kind: "fraction", top: this.#argument(depth + 1), bottom: this.#argument(depth + 1),
+          ...(binomial && { bar: false }), ...(name[0] === "d" && { display: true }),
+          ...(name[0] === "t" && { display: false }),
         }, range);
+        return binomial ? this.create({ kind: "fence", left: "(", right: ")", body: fraction }, range) : fraction;
+      }
+      case "mathbb":
+        return blackboard(this.#argument(depth + 1), range);
       case "sqrt": {
         let index: MathNode | undefined;
         if (this.peek().value === "[") {

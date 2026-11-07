@@ -39,6 +39,7 @@ export interface Atom {
   readonly kind: "atom";
   readonly role: AtomRole;
   readonly value: string;
+  readonly upright?: true;
 }
 
 export interface Row {
@@ -62,6 +63,6 @@ export interface Table {
 export type MathNode =
   | Atom | Row | Fence | Table
   | { readonly kind: "space"; readonly width: number }
-  | { readonly kind: "fraction"; readonly top: MathNode; readonly bottom: MathNode }
+  | { readonly kind: "fraction"; readonly top: MathNode; readonly bottom: MathNode; readonly bar?: false; readonly display?: boolean }
   | { readonly kind: "root"; readonly body: MathNode; readonly index?: MathNode }
   | { readonly kind: "script"; readonly base: MathNode; readonly sub?: MathNode; readonly sup?: MathNode };
