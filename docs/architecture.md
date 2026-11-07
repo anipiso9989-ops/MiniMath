@@ -4,7 +4,7 @@ MiniMath implements the Mini math engine as `packages/math` in a pnpm TypeScript
 
 ## Rendering path
 
-1. Enforce input bounds and scan tokens on demand. Source locations are UTF-16 offsets. Optional macro expansion injects bounded token frames during parsing, so replacements use the same grammar and diagnostics.
+1. Enforce input bounds and scan tokens on demand. Source locations are UTF-16 offsets. The optional macro module scans unexpanded arguments, substitutes tokens without merging control words, and injects bounded expansion frames. Declarations and expansion state are owned by a single render.
 2. Build a discriminated math AST. The core grammar handles atoms, fractions, roots, fences and scripts. Advanced environment parsing supplies table and fenced table nodes through an internal hook.
 3. Emit MathML and readable fallback from the same AST. The browser adapter can mirror the MathML emission into namespaced DOM nodes in one traversal.
 4. When the SVG subpath is selected, convert the AST to positioned boxes using local deterministic advance and vertical metrics. Emit SVG from those boxes and preserve MathML as the companion semantic representation.

@@ -117,10 +117,11 @@ test("fetches advanced code on demand, rejects stale loads, and applies alignmen
         ok: result.ok, stale: (await view.ready) === undefined,
         align: [...host.querySelectorAll("mtd")].map((cell) => getComputedStyle(cell).textAlign),
         rows: host.querySelectorAll("mtr").length,
+        firstCell: host.querySelector("mtd").textContent,
       };
-    }, tex`\begin{aligned}x&=1\\y&=2\end{aligned}`);
+    }, tex`\newcommand{\identity}[1]{#1}\begin{aligned}\identity{x}&=1\\y&=2\end{aligned}`);
     assert.equal(requested.filter((path) => path === chunks[0]).length, 1);
-    assert.deepEqual(state, { ok: true, stale: true, align: ["right", "left", "right", "left"], rows: 2 });
+    assert.deepEqual(state, { ok: true, stale: true, align: ["right", "left", "right", "left"], rows: 2, firstCell: "x" });
   } finally {
     await page.close();
   }

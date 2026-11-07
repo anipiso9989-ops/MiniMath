@@ -8,7 +8,7 @@ export interface Token {
 
 interface Frame {
   readonly source: string;
-  readonly origin?: Range;
+  readonly origin: Range | undefined;
   position: number;
 }
 
@@ -21,8 +21,8 @@ export class Lexer {
   #expansions = 0;
   #bytes = 0;
 
-  constructor(source: string, readonly limits: Limits) {
-    this.#frames = [{ source, position: 0 }];
+  constructor(source: string, readonly limits: Limits, origin?: Range) {
+    this.#frames = [{ source, origin, position: 0 }];
   }
 
   #range(frame: Frame, start: number): Range {
@@ -37,21 +37,26 @@ export class Lexer {
         (this.#bytes += byteLength(source)) > this.limits.maxInputBytes) {
       fail("expansion-limit", "Expanded macro text exceeds the UTF-8 byte limit.", origin);
     }
-    this.#frames.push({ source, origin, position: 0 });
+    if (source) this.#frames.push({ source, origin, position: 0 });
   }
 
-  read(): Token {
+  // The macro reader can put back its most recently read token before expanding.
+  unread(token: Token): void {
+    this.#frames[this.#frames.length - 1].position -= token.value.length;
+  }
+
+  read(preserveSpace = false): Token {
     for (;;) {
       const frame = this.#frames[this.#frames.length - 1];
       const { source } = frame;
       const start = frame.position;
       if (start === source.length) {
-        if (this.#frames.length === 1) return { value: "", range: [start, start] };
+        if (this.#frames.length === 1) return { value: "", range: this.#range(frame, start) };
         this.#frames.pop();
         continue;
       }
       const value = this.#character(frame);
-      if (white.test(value)) continue;
+      if (!preserveSpace && white.test(value)) continue;
       if (value === "%") {
         while (frame.position < source.length && !/[\r\n]/.test(source[frame.position])) frame.position++;
         continue;
@@ -68,26 +73,22 @@ export class Lexer {
   }
 
   rawGroup(open: Token, depth: number): string {
-    const frame = this.#frames[this.#frames.length - 1];
     let nesting = 1;
     let text = "";
-    while (frame.position < frame.source.length) {
-      const start = frame.position;
-      const value = this.#character(frame);
+    for (let token = this.read(true); token.value; token = this.read(true)) {
+      const { value, range } = token;
       if (value === "}") {
         if (--nesting === 0) return text;
       } else if (value === "{") {
         if (depth + nesting++ > this.limits.maxDepth) {
-          fail("depth-limit", "Maximum nesting depth exceeded.", this.#range(frame, start));
+          fail("depth-limit", "Maximum nesting depth exceeded.", range);
         }
-      } else if (value === "\\" && frame.position < frame.source.length) {
-        const escaped = this.#character(frame);
-        if (!"{}\\$%&#_ ".includes(escaped)) {
-          fail("syntax", "Unsupported text escape.", this.#range(frame, start));
+      } else if (value[0] === "\\") {
+        const escaped = value.slice(1);
+        if (escaped.length !== 1 || !"{}\\$%&#_ ".includes(escaped)) {
+          fail("syntax", "Unsupported text escape.", range);
         }
         text += escaped;
-      } else if (value === "%") {
-        while (frame.position < frame.source.length && !/[\r\n]/.test(frame.source[frame.position])) frame.position++;
       } else {
         text += value;
       }

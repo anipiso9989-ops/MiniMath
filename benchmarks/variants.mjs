@@ -1,6 +1,6 @@
-import { core, matrices } from "./fixtures.mjs";
+import { core, macros, matrices } from "./fixtures.mjs";
 
-export const fixtures = { core, matrices };
+export const fixtures = { core, matrices, macros };
 
 export const bundles = {
   "MiniMath parse only": 'export { parse } from "@mini/math";',
@@ -26,9 +26,9 @@ const mini = (method, path) => ({
 
 export const renderers = {
   "MiniMath": { ...mini("render", "@mini/math"), workloads: ["core"] },
-  "MiniMath advanced": { ...mini("renderAdvanced", "@mini/math/advanced"), workloads: ["matrices"] },
+  "MiniMath advanced": { ...mini("renderAdvanced", "@mini/math/advanced"), workloads: ["matrices", "macros"] },
   "KaTeX": {
-    workloads: ["core", "matrices"],
+    workloads: ["core", "matrices", "macros"],
     browser: 'import { renderToString } from "katex"; globalThis.convert = (source) => renderToString(source, { output: "mathml", displayMode: true, trust: false });',
     async load() {
       const { renderToString } = await import("katex");
@@ -41,6 +41,14 @@ export const renderers = {
     async load() {
       const { createMathML } = await import("./mathjax.mjs");
       return createMathML();
+    },
+  },
+  "MathJax with macros": {
+    workloads: ["macros"],
+    browser: 'import { createMacroMathML } from "./benchmarks/mathjax-macros.mjs"; globalThis.convert = createMacroMathML();',
+    async load() {
+      const { createMacroMathML } = await import("./mathjax-macros.mjs");
+      return createMacroMathML();
     },
   },
 };

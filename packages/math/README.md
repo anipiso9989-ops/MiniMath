@@ -7,7 +7,7 @@ MiniMath renders TeX-like mathematics in Node.js 20+ and modern browsers. The pa
 | Import | Exports |
 | --- | --- |
 | `@mini/math` | `parse(source, options?)` returns a typed math AST. `render(source, options?)` returns MathML and readable text. |
-| `@mini/math/advanced` | `parseAdvanced` and `renderAdvanced` add matrices, equation environments, and macros. |
+| `@mini/math/advanced` | `parseAdvanced` and `renderAdvanced` add matrices, equation environments, and parameterized macros. |
 | `@mini/math/visual` | `renderVisual` returns SVG, MathML, readable text, and layout metrics. |
 | `@mini/math/advanced/visual` | `renderAdvancedVisual` adds the advanced grammar to the SVG renderer. |
 | `@mini/math/browser` | `mount(container, source, options?)` owns a browser view. |
@@ -34,9 +34,16 @@ const { renderAdvanced } = await import("@mini/math/advanced");
 const matrix = renderAdvanced(String.raw`\begin{pmatrix}1&2\\3&4\end{pmatrix}`, {
   display: true,
 });
-const equation = renderAdvanced(String.raw`A=\disk`, {
-  macros: { [String.raw`\disk`]: String.raw`\pi r^2` },
+const equation = renderAdvanced(String.raw`A=\disk{r}`, {
+  macros: { [String.raw`\disk`]: String.raw`\pi {#1}^2` },
 });
+const indexed = renderAdvanced(String.raw`\at{i}+\at[y]{j}`, {
+  macros: { [String.raw`\at`]: ["#1_{#2}", 2, "x"] },
+});
+const definedInTeX = renderAdvanced(String.raw`
+  \newcommand{\sq}[1]{{#1}^2}
+  \sq{x+y}
+`);
 ```
 
 For MathML cell alignment, import `@mini/math/styles.css` from your bundler or serve it as an external stylesheet. The core renderer and browser adapter run without stylesheet injection.
@@ -63,15 +70,21 @@ Mount replaces the container's children with a view it owns. Enable `advanced: t
 | Symbols and named operators | Greek letters and variants, common set and logical operators, arrows, `\sum`, `\prod`, `\int`, `\lim`, and named functions such as `\sin`, `\log`, and `\det`. The command tables are in [symbols.ts](src/parse/symbols.ts). |
 | Prose and spacing | `\text{...}`, `\,`, `\:`, `\;`, backslash-space, `\quad`, and `\qquad`. Inside text, backslash escapes braces, backslash, space, dollar, percent, ampersand, hash, and underscore. |
 | Advanced environments | `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`, `Vmatrix`, `aligned`, `align`, `align*`, `cases`, `equation`, and `equation*`. Separate cells with `&` and rows with two backslashes. Tables are rectangular and cases have two columns. Empty cells and a final row separator are accepted. Equations are unnumbered. |
-| Advanced macros | Application-supplied, zero-argument replacements keyed by new backslash commands made of ASCII letters. Replacements can call other macros. Built-ins take precedence through configuration validation. |
+| Advanced macros | Configured macros and source declarations support up to nine arguments, a first optional argument with a default, nested calls, and repeated or reordered parameters. |
 
-Pass the expression body directly. Surrounding `$` or `$$`, arbitrary TeX packages, equation numbering and references, and parameterized macros are outside this profile. The package typesets equations and matrices. It takes TeX-like source and emits presentation MathML.
+Pass the expression body directly. Surrounding `$` or `$$`, arbitrary TeX packages and equation numbering and references are outside this profile. The package typesets equations and matrices. It takes TeX-like source and emits presentation MathML.
+
+## Parameterized macros
+
+Keys in `options.macros` are new backslash commands made of ASCII letters. String replacements infer the argument count from the highest parameter marker. Use the tuple `[replacement, argumentCount, defaultFirstArgument?]` for explicit arity and an optional default. Required arguments accept a braced group or a single token. Write `##` to pass a literal parameter marker into a nested definition.
+
+Source supports `\newcommand`, `\renewcommand`, `\providecommand`, `\def`, `\gdef`, and `\let`. For example, `\def\swap(#1,#2){(#2,#1)}\swap(a,b)` renders `(b,a)`. Braces protect delimiters inside an argument. Definitions are local to their group or environment. `\gdef` makes a definition available for the rest of the current render. `\let` captures a command's current definition. Built-ins are protected and renders keep separate definition state.
 
 ## Accessibility and security
 
 MathML is the default visual and semantic representation. Its layout and speech depend on the browser, math fonts, and assistive technology. The browser view uses the readable text artifact if native MathML is unavailable or `textOnly: true` is supplied. The SVG backend uses an accessible title and returns the companion MathML for contexts that can expose richer semantics. The SVG metrics are deterministic approximations in em units. Ascent is the distance above the baseline, descent is the distance below it, and the SVG adds 0.1 em of padding on each side. Actual glyph shapes depend on local fonts.
 
-The renderer encodes text in generated XML and emits a fixed set of tags and attributes. Browser mounting uses namespaced DOM elements and text nodes. Math source cannot add URLs, HTML, styles, event handlers, or network resources. Display the `text` artifact as text. Options and macro definitions are application configuration.
+The renderer encodes text in generated XML and emits a fixed set of tags and attributes. Browser mounting uses namespaced DOM elements and text nodes. Math source cannot add URLs, HTML, styles, event handlers, or network resources. Display the `text` artifact as text. Macro values supplied through options are application configuration. Declarations in source use the same input and expansion limits.
 
 | Limit | Default | Counts |
 | --- | ---: | --- |
@@ -79,6 +92,6 @@ The renderer encodes text in generated XML and emits a fixed set of tags and att
 | `maxNodes` | 4,096 | AST nodes, including structural rows. |
 | `maxDepth` | 64 | Recursive syntax nesting, with root at depth zero. |
 | `maxOutputBytes` | 262,144 | Total UTF-8 bytes of serialized MathML, readable text, and SVG if requested. |
-| `maxExpansions` | 128 | Macro invocations per expression. |
+| `maxExpansions` | 128 | Macro invocations and declarations per expression. |
 
-Override individual ceilings with `options.limits`. `options.signal` is checked before and during parsing and after a pending browser module load. Core calls are synchronous. Browser updates discard results superseded during lazy loading.
+Macro template scanning and substitution also have a work budget proportional to the input ceiling. Override individual ceilings with `options.limits`. `options.signal` is checked before and during parsing and after a pending browser module load. Core calls are synchronous. Browser updates discard results superseded during lazy loading.

@@ -17,7 +17,11 @@ const first = render(sources[0]);
 const firstMs = performance.now() - firstStart;
 if (!first.includes("<math")) throw new Error("Expected MathML.");
 const loaded = heap();
-const outputBytes = sources.reduce((bytes, source) => bytes + Buffer.byteLength(render(source)), 0);
+const outputBytes = sources.reduce((bytes, source) => {
+  const markup = render(source);
+  if (!markup.includes("<math") || markup.includes("<merror")) throw new Error("Expected valid fixture output.");
+  return bytes + Buffer.byteLength(markup);
+}, 0);
 let checksum = 0;
 for (let i = 0; i < 3_000; i++) checksum += render(sources[i % sources.length]).length;
 const warmed = heap();

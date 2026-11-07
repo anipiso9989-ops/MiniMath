@@ -2,11 +2,14 @@ import { parseMath, renderMath } from "../engine.js";
 import { fail } from "../model/limits.js";
 import type { MathArtifact, MathNode, RenderOptions, Result, Row, Table } from "../model/types.js";
 import type { Token } from "../parse/lexer.js";
-import { isBuiltin } from "../parse/parser.js";
 import type { Extensions, Parser } from "../parse/parser.js";
+import { macroExtensions } from "./macros.js";
+import type { MacroDefinition } from "./macros.js";
+
+export type { MacroDefinition } from "./macros.js";
 
 export interface AdvancedOptions extends RenderOptions {
-  readonly macros?: Readonly<Record<string, string>>;
+  readonly macros?: Readonly<Record<string, MacroDefinition>>;
 }
 
 const matrixFences: Readonly<Record<string, readonly [string, string]>> = {
@@ -23,10 +26,12 @@ function close(parser: Parser, name: string, depth: number): void {
 }
 
 function environment(parser: Parser, token: Token, depth: number): MathNode {
+  parser.scope(true);
   const name = parser.rawGroup(depth + 1);
   if (name === "equation" || name === "equation*") {
     const body = parser.sequence(depth + 1, [end]);
     close(parser, name, depth);
+    parser.scope(false);
     return body;
   }
   const fences = Object.hasOwn(matrixFences, name) ? matrixFences[name] : undefined;
@@ -55,6 +60,7 @@ function environment(parser: Parser, token: Token, depth: number): MathNode {
     cellStart = parser.peek();
   } while (cells.length || cellStart.value !== end);
   close(parser, name, depth);
+  parser.scope(false);
   const table = parser.create<Table>({ kind: "table", alignment: alignment ?? "center", rows }, start.range);
   if (fences && (fences[0] || fences[1])) {
     return parser.create({ kind: "fence", left: fences[0], right: fences[1], body: table }, token.range);
@@ -64,15 +70,7 @@ function environment(parser: Parser, token: Token, depth: number): MathNode {
 }
 
 export function advancedExtensions(macros?: AdvancedOptions["macros"]): Extensions {
-  if (!macros) return { environment };
-  const definitions = new Map<string, string>();
-  for (const [name, replacement] of Object.entries(macros)) {
-    if (!/^\\[A-Za-z]+$/.test(name) || isBuiltin(name.slice(1)) || typeof replacement !== "string") {
-      throw new TypeError("Macros need a new letter-only command name and a string replacement.");
-    }
-    definitions.set(name, replacement);
-  }
-  return { environment, macro: (command) => definitions.get(command) };
+  return { environment, ...macroExtensions(macros) };
 }
 
 export function parseAdvanced(source: string, options: AdvancedOptions = {}): Result<Row> {

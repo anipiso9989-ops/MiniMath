@@ -5,6 +5,7 @@ import { relative } from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import { build, version as esbuild } from "esbuild";
 import { bundles, fixtures, renderers } from "./variants.mjs";
+import { compatibility } from "./fixtures.mjs";
 
 const repeats = 7;
 const median = (values) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
@@ -62,7 +63,7 @@ async function browserSamples() {
             const start = performance.now();
             const markup = Array.from({ length: 256 }, (_, i) => globalThis.convert(sources[i % sources.length])).join("");
             main.innerHTML = markup;
-            if (main.getBoundingClientRect().height <= 0 || main.querySelectorAll("math").length !== 256) {
+            if (main.getBoundingClientRect().height <= 0 || main.querySelectorAll("math").length !== 256 || main.querySelector("merror")) {
               throw new Error("Expected native MathML layout.");
             }
             return performance.now() - start;
@@ -82,14 +83,25 @@ async function browserSamples() {
 
 const output = {
   machine: { node: process.version, platform: platform(), arch: arch(), cpu: cpus()[0]?.model, esbuild },
-  repeats, bundles: {}, node: {},
+  repeats, bundles: {}, node: {}, compatibility: {},
 };
 for (const [name, source] of Object.entries(bundles)) {
   output.bundles[name] = await size(source, name.includes("lazy") || name.includes("mount"));
 }
 output.bundles["MiniMath alignment CSS"] = { initial: filesSize([{ contents: readFileSync("packages/math/styles.css") }]) };
 for (const [name, variant] of Object.entries(renderers)) {
-  if (name === "KaTeX" || name === "MathJax") output.bundles[name] = await size(variant.browser, false);
+  if (name === "KaTeX" || name.startsWith("MathJax")) output.bundles[name] = await size(variant.browser, false);
+  if (variant.workloads.includes("macros")) {
+    const render = await variant.load();
+    output.compatibility[name] = Object.fromEntries(Object.entries(compatibility).map(([label, source]) => {
+      try {
+        const markup = render(source);
+        return [label, markup.includes("<math") && !markup.includes("<merror")];
+      } catch {
+        return [label, false];
+      }
+    }));
+  }
   for (const workload of variant.workloads) {
     const samples = Array.from({ length: repeats }, () => JSON.parse(execFileSync(
       process.execPath, ["--expose-gc", "benchmarks/sample.mjs", name, workload], { encoding: "utf8" })));

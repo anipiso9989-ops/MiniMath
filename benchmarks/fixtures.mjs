@@ -19,3 +19,22 @@ export const matrices = [
   tex`\begin{cases}x^2&x>0\\0&x\le0\end{cases}`,
   tex`A=\begin{Vmatrix}a&b\\c&d\end{Vmatrix}`,
 ];
+
+export const macros = [
+  tex`\newcommand{\sq}[1]{{#1}^2}\sq{x+y}`,
+  tex`\newcommand{\at}[2]{#1_{#2}}\at{x}{1}+\at{y}{2}`,
+  tex`\def\pair(#1,#2){\frac{#1}{#2}}\pair({a+b},c)`,
+  tex`\def\old#1{\sqrt{#1}}\let\save\old\def\old#1{#1^2}\save{x}+\old{x}`,
+  tex`\newcommand{\rev}[2]{\left(#2,#1\right)}\rev{\alpha}{\beta}`,
+  tex`\newcommand{\norm}[1]{\left\|#1\right\|}\norm{\begin{bmatrix}1&2\\3&4\end{bmatrix}}`,
+];
+
+export const compatibility = {
+  "Optional default in newcommand": tex`\newcommand{\at}[2][x]{#1_{#2}}\at{1}+\at[y]{2}`,
+  "Eager edef definition": tex`\def\value{x}\edef\snapshot{\value}\def\value{y}\snapshot`,
+  "Blackboard bold": tex`\mathbb{R}`,
+  "Binomial coefficients": tex`\binom{n}{k}`,
+  "Labeled arrows": tex`A\xrightarrow{f}B`,
+  "Arrays with column specifications": tex`\begin{array}{lr}a&b\\c&d\end{array}`,
+  "Equation tags": tex`\begin{equation}x=1\tag{5}\end{equation}`,
+};

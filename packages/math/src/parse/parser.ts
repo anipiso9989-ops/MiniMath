@@ -5,7 +5,8 @@ import type { Token } from "./lexer.js";
 import { delimiter, space, symbol } from "./symbols.js";
 
 export interface Extensions {
-  readonly macro?: (command: string) => string | undefined;
+  readonly macro?: (lexer: Lexer, token: Token) => boolean;
+  readonly scope?: (enter: boolean) => void;
   readonly environment?: (parser: Parser, token: Token, depth: number) => MathNode;
 }
 
@@ -32,11 +33,8 @@ export class Parser {
     if (this.#lookahead) return this.#lookahead;
     for (;;) {
       const token = this.#lexer.read();
-      const macro = this.extensions?.macro;
-      const replacement = macro && token.value[0] === "\\" ? macro(token.value) : undefined;
-      if (replacement === undefined) return this.#lookahead = token;
+      if (token.value[0] !== "\\" || !this.extensions?.macro?.(this.#lexer, token)) return this.#lookahead = token;
       checkAbort(this.signal);
-      this.#lexer.expand(replacement, token.range);
     }
   }
 
@@ -60,6 +58,10 @@ export class Parser {
 
   depth(depth: number, range: Range): void {
     if (depth > this.limits.maxDepth) fail("depth-limit", "Maximum nesting depth exceeded.", range);
+  }
+
+  scope(enter: boolean): void {
+    this.extensions?.scope?.(enter);
   }
 
   rawGroup(depth: number): string {
@@ -132,8 +134,10 @@ export class Parser {
   #atom(token: Token, depth: number): MathNode {
     const { value, range } = token;
     if (value === "{") {
+      this.scope(true);
       const row = this.sequence(depth + 1, ["}"]);
       this.expect("}", "Expected a closing brace.");
+      this.scope(false);
       return row;
     }
     if (value[0] === "\\") return this.#command(token, depth);

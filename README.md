@@ -1,6 +1,6 @@
 # MiniMath
 
-MiniMath is the standalone TypeScript math engine in the Mini architecture. The `@mini/math` package turns a documented TeX-like subset into native MathML and readable text, with optional matrices, aligned equations, macro expansion, browser mounting, and SVG layout. It ships as ESM with declarations and zero runtime dependencies.
+MiniMath is the standalone TypeScript math engine in the Mini architecture. The `@mini/math` package turns a documented TeX-like subset into native MathML and readable text, with optional matrices, aligned equations, parameterized macros, browser mounting, and SVG layout. It ships as ESM with declarations and zero runtime dependencies.
 
 ```ts
 import { render } from "@mini/math";
