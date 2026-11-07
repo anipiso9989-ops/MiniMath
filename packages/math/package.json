@@ -1,0 +1,30 @@
+{
+  "name": "@mini/math",
+  "version": "0.1.0",
+  "description": "A bounded TeX-like math renderer with native MathML and optional SVG.",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "styles.css"
+  ],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./advanced": "./dist/features/advanced.js",
+    "./browser": "./dist/browser/index.js",
+    "./visual": "./dist/backends/visual.js",
+    "./integration": "./dist/integration.js",
+    "./styles.css": "./styles.css",
+    "./advanced/visual": "./dist/features/advanced-visual.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "tsc -p tsconfig.json"
+  }
+}
